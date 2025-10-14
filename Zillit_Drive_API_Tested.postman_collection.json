@@ -1,0 +1,449 @@
+{
+  "info": {
+    "name": "Zillit Drive API - Tested Collection",
+    "description": "Tested and verified API collection for Zillit Drive folder and file management",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8105",
+      "type": "string"
+    },
+    {
+      "key": "moduleData",
+      "value": "934a93cdef3e6aa550a1f18ed87db20e0298c982058539417f56919361658e7c440042945616eb953cf3d2a6a770099d61c21572941067951ccab89f96d8d6f171ffac1cf6441748d9079cf43be976a9a122acca46b7b3d4b2dab23f705e27a8f10aeb04a3a07cd94d7681c225f9dbf1d6bb281fd7ab4eec09b11985fecf47e32bff6b4ff7fc9fc4a7b1f57184d613e97cc9a9afbfb903fe64f50ec68a7d17f4d0ec09cc86d65ddd10dde1c0b47c249c654dc5af16b769ece7008efe56fa27652d259984135e1ec1316bb74fc0fb268a99ca60b31481b538af36db916b40e709",
+      "type": "string"
+    },
+    {
+      "key": "folderId",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Health Check",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"Status code is 200\", function () {",
+              "    pm.response.to.have.status(200);",
+              "});",
+              "",
+              "pm.test(\"Response contains process_id\", function () {",
+              "    var jsonData = pm.response.json();",
+              "    pm.expect(jsonData.data).to.have.property('process_id');",
+              "});"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "moduleData",
+            "value": "{{moduleData}}",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v2/health",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "v2", "health"]
+        }
+      },
+      "response": [
+        {
+          "name": "Health Check Success",
+          "originalRequest": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "moduleData",
+                "value": "934a93cdef3e6aa550a1f18ed87db20e0298c982058539417f56919361658e7c440042945616eb953cf3d2a6a770099d61c21572941067951ccab89f96d8d6f171ffac1cf6441748d9079cf43be976a9a122acca46b7b3d4b2dab23f705e27a8f10aeb04a3a07cd94d7681c225f9dbf1d6bb281fd7ab4eec09b11985fecf47e32bff6b4ff7fc9fc4a7b1f57184d613e97cc9a9afbfb903fe64f50ec68a7d17f4d0ec09cc86d65ddd10dde1c0b47c249c654dc5af16b769ece7008efe56fa27652d259984135e1ec1316bb74fc0fb268a99ca60b31481b538af36db916b40e709",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "http://localhost:8105/api/v2/health",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "8105",
+              "path": ["api", "v2", "health"]
+            }
+          },
+          "status": "OK",
+          "code": 200,
+          "_postman_previewlanguage": "json",
+          "header": [],
+          "cookie": [],
+          "body": "{\"message\":\"V1 Ok\",\"data\":{\"process_id\":46244,\"uptime\":19.6279015}}"
+        }
+      ]
+    },
+    {
+      "name": "Drive Folders",
+      "item": [
+        {
+          "name": "Create Root Folder",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Folder created successfully\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.status).to.eql(1);",
+                  "    pm.expect(jsonData.message).to.eql('folder_created');",
+                  "});",
+                  "",
+                  "// Store folder ID for later use",
+                  "if (pm.response.json().data && pm.response.json().data._id) {",
+                  "    pm.collectionVariables.set(\"folderId\", pm.response.json().data._id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "moduleData",
+                "value": "{{moduleData}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"folder_name\": \"My Documents\",\n  \"description\": \"Personal documents folder\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v2/drive/folders",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v2", "drive", "folders"]
+            }
+          },
+          "response": [
+            {
+              "name": "Create Folder Success",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "moduleData",
+                    "value": "934a93cdef3e6aa550a1f18ed87db20e0298c982058539417f56919361658e7c440042945616eb953cf3d2a6a770099d61c21572941067951ccab89f96d8d6f171ffac1cf6441748d9079cf43be976a9a122acca46b7b3d4b2dab23f705e27a8f10aeb04a3a07cd94d7681c225f9dbf1d6bb281fd7ab4eec09b11985fecf47e32bff6b4ff7fc9fc4a7b1f57184d613e97cc9a9afbfb903fe64f50ec68a7d17f4d0ec09cc86d65ddd10dde1c0b47c249c654dc5af16b769ece7008efe56fa27652d259984135e1ec1316bb74fc0fb268a99ca60b31481b538af36db916b40e709",
+                    "type": "text"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\"folder_name\": \"Test Folder\", \"description\": \"A test folder for API testing\"}"
+                },
+                "url": {
+                  "raw": "http://localhost:8105/api/v2/drive/folders",
+                  "protocol": "http",
+                  "host": ["localhost"],
+                  "port": "8105",
+                  "path": ["api", "v2", "drive", "folders"]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [],
+              "cookie": [],
+              "body": "{\"status\":1,\"message\":\"folder_created\",\"messageElements\":[],\"data\":{\"project_id\":\"68e8db196e85238284719072\",\"parent_folder_id\":null,\"folder_name\":\"Test Folder\",\"folder_path\":\"\",\"description\":\"A test folder for API testing\",\"is_active\":true,\"created_by\":\"68e8db196e852382847195c2\",\"updated_by\":\"68e8db196e852382847195c2\",\"deleted_on\":0,\"_id\":\"68edf718c89336ab1f98b787\",\"created_on\":1760425752659,\"updated_on\":1760425752659,\"__v\":0}}"
+            }
+          ]
+        },
+        {
+          "name": "Create Subfolder",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "moduleData",
+                "value": "{{moduleData}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"folder_name\": \"Reports\",\n  \"description\": \"Monthly reports subfolder\",\n  \"parent_folder_id\": \"{{folderId}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v2/drive/folders",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v2", "drive", "folders"]
+            }
+          },
+          "response": [
+            {
+              "name": "Create Subfolder Success",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "moduleData",
+                    "value": "934a93cdef3e6aa550a1f18ed87db20e0298c982058539417f56919361658e7c440042945616eb953cf3d2a6a770099d61c21572941067951ccab89f96d8d6f171ffac1cf6441748d9079cf43be976a9a122acca46b7b3d4b2dab23f705e27a8f10aeb04a3a07cd94d7681c225f9dbf1d6bb281fd7ab4eec09b11985fecf47e32bff6b4ff7fc9fc4a7b1f57184d613e97cc9a9afbfb903fe64f50ec68a7d17f4d0ec09cc86d65ddd10dde1c0b47c249c654dc5af16b769ece7008efe56fa27652d259984135e1ec1316bb74fc0fb268a99ca60b31481b538af36db916b40e709",
+                    "type": "text"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\"folder_name\": \"Documents\", \"description\": \"Documents subfolder\", \"parent_folder_id\": \"68edf718c89336ab1f98b787\"}"
+                },
+                "url": {
+                  "raw": "http://localhost:8105/api/v2/drive/folders",
+                  "protocol": "http",
+                  "host": ["localhost"],
+                  "port": "8105",
+                  "path": ["api", "v2", "drive", "folders"]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [],
+              "cookie": [],
+              "body": "{\"status\":1,\"message\":\"folder_created\",\"messageElements\":[],\"data\":{\"project_id\":\"68e8db196e85238284719072\",\"parent_folder_id\":\"68edf718c89336ab1f98b787\",\"folder_name\":\"Documents\",\"folder_path\":\"Test Folder\",\"description\":\"Documents subfolder\",\"is_active\":true,\"created_by\":\"68e8db196e852382847195c2\",\"updated_by\":\"68e8db196e852382847195c2\",\"deleted_on\":0,\"_id\":\"68edf728c89336ab1f98b792\",\"created_on\":1760425768213,\"updated_on\":1760425768213,\"__v\":0}}"
+            }
+          ]
+        },
+        {
+          "name": "Create File (Folder with Attachments)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "moduleData",
+                "value": "{{moduleData}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"folder_name\": \"Important Document.pdf\",\n  \"description\": \"An important PDF document\",\n  \"parent_folder_id\": \"{{folderId}}\",\n  \"attachments\": [\n    {\n      \"media\": \"https://example.com/document.pdf\",\n      \"name\": \"Important Document.pdf\",\n      \"content_type\": \"document\",\n      \"content_subtype\": \"pdf\",\n      \"file_size\": \"1024000\",\n      \"bucket\": \"my-bucket\",\n      \"region\": \"us-east-1\"\n    }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v2/drive/folders",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v2", "drive", "folders"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get All Folders",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "moduleData",
+                "value": "{{moduleData}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v2/drive/folders",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v2", "drive", "folders"]
+            }
+          },
+          "response": [
+            {
+              "name": "Get All Folders Success",
+              "originalRequest": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "moduleData",
+                    "value": "934a93cdef3e6aa550a1f18ed87db20e0298c982058539417f56919361658e7c440042945616eb953cf3d2a6a770099d61c21572941067951ccab89f96d8d6f171ffac1cf6441748d9079cf43be976a9a122acca46b7b3d4b2dab23f705e27a8f10aeb04a3a07cd94d7681c225f9dbf1d6bb281fd7ab4eec09b11985fecf47e32bff6b4ff7fc9fc4a7b1f57184d613e97cc9a9afbfb903fe64f50ec68a7d17f4d0ec09cc86d65ddd10dde1c0b47c249c654dc5af16b769ece7008efe56fa27652d259984135e1ec1316bb74fc0fb268a99ca60b31481b538af36db916b40e709",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "http://localhost:8105/api/v2/drive/folders",
+                  "protocol": "http",
+                  "host": ["localhost"],
+                  "port": "8105",
+                  "path": ["api", "v2", "drive", "folders"]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [],
+              "cookie": [],
+              "body": "{\"status\":1,\"message\":\"folders_fetched\",\"messageElements\":[],\"data\":[{\"_id\":\"68edf736c89336ab1f98b79d\",\"project_id\":\"68e8db196e85238284719072\",\"parent_folder_id\":\"68edf728c89336ab1f98b792\",\"folder_name\":\"Important Document.pdf\",\"folder_path\":\"Test Folder/Documents\",\"description\":\"An important PDF document\",\"is_active\":true,\"created_by\":\"68e8db196e852382847195c2\",\"updated_by\":\"68e8db196e852382847195c2\",\"deleted_on\":0,\"created_on\":1760425782808,\"updated_on\":1760425782808,\"__v\":0},{\"_id\":\"68edf728c89336ab1f98b792\",\"project_id\":\"68e8db196e85238284719072\",\"parent_folder_id\":\"68edf718c89336ab1f98b787\",\"folder_name\":\"Documents\",\"folder_path\":\"Test Folder\",\"description\":\"Documents subfolder\",\"is_active\":true,\"created_by\":\"68e8db196e852382847195c2\",\"updated_by\":\"68e8db196e852382847195c2\",\"deleted_on\":0,\"created_on\":1760425768213,\"updated_on\":1760425768213,\"__v\":0},{\"_id\":\"68edf718c89336ab1f98b787\",\"project_id\":\"68e8db196e85238284719072\",\"parent_folder_id\":null,\"folder_name\":\"Test Folder\",\"folder_path\":\"\",\"description\":\"A test folder for API testing\",\"is_active\":true,\"created_by\":\"68e8db196e852382847195c2\",\"updated_by\":\"68e8db196e852382847195c2\",\"deleted_on\":0,\"created_on\":1760425752659,\"updated_on\":1760425752659,\"__v\":0}]}"
+            }
+          ]
+        },
+        {
+          "name": "Get Folder by ID",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "moduleData",
+                "value": "{{moduleData}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v2/drive/folders/{{folderId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v2", "drive", "folders", "{{folderId}}"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Update Folder",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "moduleData",
+                "value": "{{moduleData}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"folder_name\": \"Updated Folder Name\",\n  \"description\": \"Updated description for testing\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v2/drive/folders/{{folderId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v2", "drive", "folders", "{{folderId}}"]
+            }
+          },
+          "response": [
+            {
+              "name": "Update Folder Success",
+              "originalRequest": {
+                "method": "PUT",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "moduleData",
+                    "value": "934a93cdef3e6aa550a1f18ed87db20e0298c982058539417f56919361658e7c440042945616eb953cf3d2a6a770099d61c21572941067951ccab89f96d8d6f171ffac1cf6441748d9079cf43be976a9a122acca46b7b3d4b2dab23f705e27a8f10aeb04a3a07cd94d7681c225f9dbf1d6bb281fd7ab4eec09b11985fecf47e32bff6b4ff7fc9fc4a7b1f57184d613e97cc9a9afbfb903fe64f50ec68a7d17f4d0ec09cc86d65ddd10dde1c0b47c249c654dc5af16b769ece7008efe56fa27652d259984135e1ec1316bb74fc0fb268a99ca60b31481b538af36db916b40e709",
+                    "type": "text"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\"folder_name\": \"Updated Test Folder\", \"description\": \"Updated description for testing\"}"
+                },
+                "url": {
+                  "raw": "http://localhost:8105/api/v2/drive/folders/68edf718c89336ab1f98b787",
+                  "protocol": "http",
+                  "host": ["localhost"],
+                  "port": "8105",
+                  "path": ["api", "v2", "drive", "folders", "68edf718c89336ab1f98b787"]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [],
+              "cookie": [],
+              "body": "{\"status\":1,\"message\":\"folder_updated\",\"messageElements\":[],\"data\":{\"_id\":\"68edf718c89336ab1f98b787\",\"project_id\":\"68e8db196e85238284719072\",\"parent_folder_id\":null,\"folder_name\":\"Updated Test Folder\",\"folder_path\":\"\",\"description\":\"Updated description for testing\",\"is_active\":true,\"created_by\":\"68e8db196e852382847195c2\",\"updated_by\":\"68e8db196e852382847195c2\",\"deleted_on\":0,\"created_on\":1760425752659,\"updated_on\":1760425861556,\"__v\":0}}"
+            }
+          ]
+        },
+        {
+          "name": "Delete Folder",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "moduleData",
+                "value": "{{moduleData}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v2/drive/folders/:folderId",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v2", "drive", "folders", ":folderId"],
+              "variable": [
+                {
+                  "key": "folderId",
+                  "value": "FOLDER_ID_TO_DELETE"
+                }
+              ]
+            }
+          },
+          "response": [
+            {
+              "name": "Delete Folder Success",
+              "originalRequest": {
+                "method": "DELETE",
+                "header": [
+                  {
+                    "key": "moduleData",
+                    "value": "934a93cdef3e6aa550a1f18ed87db20e0298c982058539417f56919361658e7c440042945616eb953cf3d2a6a770099d61c21572941067951ccab89f96d8d6f171ffac1cf6441748d9079cf43be976a9a122acca46b7b3d4b2dab23f705e27a8f10aeb04a3a07cd94d7681c225f9dbf1d6bb281fd7ab4eec09b11985fecf47e32bff6b4ff7fc9fc4a7b1f57184d613e97cc9a9afbfb903fe64f50ec68a7d17f4d0ec09cc86d65ddd10dde1c0b47c249c654dc5af16b769ece7008efe56fa27652d259984135e1ec1316bb74fc0fb268a99ca60b31481b538af36db916b40e709",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "http://localhost:8105/api/v2/drive/folders/68edf794c89336ab1f98b7c1",
+                  "protocol": "http",
+                  "host": ["localhost"],
+                  "port": "8105",
+                  "path": ["api", "v2", "drive", "folders", "68edf794c89336ab1f98b7c1"]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [],
+              "cookie": [],
+              "body": "{\"status\":1,\"message\":\"folder_deleted\",\"messageElements\":[],\"data\":{\"message\":\"Folder deleted successfully\"}}"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

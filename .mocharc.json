@@ -1,0 +1,11 @@
+{
+  "spec": "./src/**/*.test.js",
+  "exclude": [
+    "./dist/**",
+    "./node_modules/**",
+    "./src/swagger/**",
+    "./src/App.js",
+    "./src/index.js"
+  ],
+  "exit": true
+}

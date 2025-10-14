@@ -1,0 +1,468 @@
+{
+  "info": {
+    "name": "Zillit DriveFile API - Tested Collection",
+    "description": "Tested and verified API collection for Zillit DriveFile management",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8105",
+      "type": "string"
+    },
+    {
+      "key": "moduleData",
+      "value": "934a93cdef3e6aa550a1f18ed87db20e0298c982058539417f56919361658e7c440042945616eb953cf3d2a6a770099d61c21572941067951ccab89f96d8d6f171ffac1cf6441748d9079cf43be976a9a122acca46b7b3d4b2dab23f705e27a8f10aeb04a3a07cd94d7681c225f9dbf1d6bb281fd7ab4eec09b11985fecf47e32bff6b4ff7fc9fc4a7b1f57184d613e97cc9a9afbfb903fe64f50ec68a7d17f4d0ec09cc86d65ddd10dde1c0b47c249c654dc5af16b769ece7008efe56fa27652d259984135e1ec1316bb74fc0fb268a99ca60b31481b538af36db916b40e709",
+      "type": "string"
+    },
+    {
+      "key": "fileId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "folderId",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Create File (Root Directory)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"Status code is 200\", function () {",
+              "    pm.response.to.have.status(200);",
+              "});",
+              "",
+              "pm.test(\"File created successfully\", function () {",
+              "    var jsonData = pm.response.json();",
+              "    pm.expect(jsonData.status).to.eql(1);",
+              "    pm.expect(jsonData.message).to.eql('file_created');",
+              "});",
+              "",
+              "// Store file ID for later use",
+              "if (pm.response.json().data && pm.response.json().data._id) {",
+              "    pm.collectionVariables.set(\"fileId\", pm.response.json().data._id);",
+              "}"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "moduleData",
+            "value": "{{moduleData}}",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"file_name\": \"document.pdf\",\n  \"description\": \"Important PDF document\",\n  \"file_type\": \"document\",\n  \"mime_type\": \"application/pdf\",\n  \"file_size\": \"1024 KB\",\n  \"file_size_bytes\": 1048576,\n  \"attachment\": {\n    \"url\": \"https://example.com/documents/doc.pdf\",\n    \"original_name\": \"document.pdf\",\n    \"size\": 1048576,\n    \"mime_type\": \"application/pdf\"\n  }\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/v2/drive/files",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "v2", "drive", "files"]
+        }
+      },
+      "response": [
+        {
+          "name": "Create File Success",
+          "originalRequest": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "moduleData",
+                "value": "934a93cdef3e6aa550a1f18ed87db20e0298c982058539417f56919361658e7c440042945616eb953cf3d2a6a770099d61c21572941067951ccab89f96d8d6f171ffac1cf6441748d9079cf43be976a9a122acca46b7b3d4b2dab23f705e27a8f10aeb04a3a07cd94d7681c225f9dbf1d6bb281fd7ab4eec09b11985fecf47e32bff6b4ff7fc9fc4a7b1f57184d613e97cc9a9afbfb903fe64f50ec68a7d17f4d0ec09cc86d65ddd10dde1c0b47c249c654dc5af16b769ece7008efe56fa27652d259984135e1ec1316bb74fc0fb268a99ca60b31481b538af36db916b40e709",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"file_name\": \"document.pdf\",\n  \"description\": \"Important PDF document\",\n  \"file_type\": \"document\",\n  \"mime_type\": \"application/pdf\",\n  \"file_size\": \"1024 KB\",\n  \"file_size_bytes\": 1048576,\n  \"attachment\": {\n    \"url\": \"https://example.com/documents/doc.pdf\",\n    \"original_name\": \"document.pdf\",\n    \"size\": 1048576,\n    \"mime_type\": \"application/pdf\"\n  }\n}"
+            },
+            "url": {
+              "raw": "http://localhost:8105/api/v2/drive/files",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "8105",
+              "path": ["api", "v2", "drive", "files"]
+            }
+          },
+          "status": "OK",
+          "code": 200,
+          "_postman_previewlanguage": "json",
+          "header": [],
+          "cookie": [],
+          "body": "{\"status\":1,\"message\":\"file_created\",\"messageElements\":[],\"data\":{\"project_id\":\"68e8db196e85238284719072\",\"folder_id\":null,\"file_name\":\"document.pdf\",\"file_path\":\"\",\"description\":\"Important PDF document\",\"file_type\":\"document\",\"file_extension\":\"pdf\",\"file_size\":\"1024 KB\",\"file_size_bytes\":1048576,\"mime_type\":\"application/pdf\",\"is_active\":true,\"created_by\":\"68e8db196e852382847195c2\",\"updated_by\":\"68e8db196e852382847195c2\",\"uploaded_by\":\"68e8db196e852382847195c2\",\"deleted_on\":0,\"_id\":\"68edfc97c89336ab1f98b7d6\",\"created_on\":1760427159474,\"updated_on\":1760427159474,\"__v\":0}}"
+        }
+      ]
+    },
+    {
+      "name": "Create File in Folder",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "moduleData",
+            "value": "{{moduleData}}",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"file_name\": \"report.xlsx\",\n  \"folder_id\": \"{{folderId}}\",\n  \"description\": \"Monthly report spreadsheet\",\n  \"file_type\": \"spreadsheet\",\n  \"mime_type\": \"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet\",\n  \"file_size\": \"2.5 MB\",\n  \"file_size_bytes\": 2621440,\n  \"attachment\": {\n    \"url\": \"https://example.com/reports/monthly_report.xlsx\",\n    \"original_name\": \"monthly_report.xlsx\",\n    \"size\": 2621440,\n    \"mime_type\": \"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet\"\n  }\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/v2/drive/files",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "v2", "drive", "files"]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "Get All Files",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "moduleData",
+            "value": "{{moduleData}}",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v2/drive/files",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "v2", "drive", "files"]
+        }
+      },
+      "response": [
+        {
+          "name": "Get All Files Success",
+          "originalRequest": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "moduleData",
+                "value": "934a93cdef3e6aa550a1f18ed87db20e0298c982058539417f56919361658e7c440042945616eb953cf3d2a6a770099d61c21572941067951ccab89f96d8d6f171ffac1cf6441748d9079cf43be976a9a122acca46b7b3d4b2dab23f705e27a8f10aeb04a3a07cd94d7681c225f9dbf1d6bb281fd7ab4eec09b11985fecf47e32bff6b4ff7fc9fc4a7b1f57184d613e97cc9a9afbfb903fe64f50ec68a7d17f4d0ec09cc86d65ddd10dde1c0b47c249c654dc5af16b769ece7008efe56fa27652d259984135e1ec1316bb74fc0fb268a99ca60b31481b538af36db916b40e709",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "http://localhost:8105/api/v2/drive/files",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "8105",
+              "path": ["api", "v2", "drive", "files"]
+            }
+          },
+          "status": "OK",
+          "code": 200,
+          "_postman_previewlanguage": "json",
+          "header": [],
+          "cookie": [],
+          "body": "{\"status\":1,\"message\":\"files_fetched\",\"messageElements\":[],\"data\":[{\"_id\":\"68edfcbcc89336ab1f98b7e1\",\"project_id\":\"68e8db196e85238284719072\",\"folder_id\":\"68edf728c89336ab1f98b792\",\"file_name\":\"report.xlsx\",\"file_path\":\"\",\"description\":\"Monthly report spreadsheet\",\"file_type\":\"spreadsheet\",\"file_extension\":\"xlsx\",\"file_size\":\"2.5 MB\",\"file_size_bytes\":2621440,\"mime_type\":\"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet\",\"is_active\":true,\"created_by\":\"68e8db196e852382847195c2\",\"updated_by\":\"68e8db196e852382847195c2\",\"uploaded_by\":\"68e8db196e852382847195c2\",\"deleted_on\":0,\"created_on\":1760427196290,\"updated_on\":1760427196290,\"__v\":0},{\"_id\":\"68edfc97c89336ab1f98b7d6\",\"project_id\":\"68e8db196e85238284719072\",\"folder_id\":null,\"file_name\":\"document.pdf\",\"file_path\":\"\",\"description\":\"Important PDF document\",\"file_type\":\"document\",\"file_extension\":\"pdf\",\"file_size\":\"1024 KB\",\"file_size_bytes\":1048576,\"mime_type\":\"application/pdf\",\"is_active\":true,\"created_by\":\"68e8db196e852382847195c2\",\"updated_by\":\"68e8db196e852382847195c2\",\"uploaded_by\":\"68e8db196e852382847195c2\",\"deleted_on\":0,\"created_on\":1760427159474,\"updated_on\":1760427159474,\"__v\":0}]}"
+        }
+      ]
+    },
+    {
+      "name": "Get Files by Folder",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "moduleData",
+            "value": "{{moduleData}}",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v2/drive/files?folder_id={{folderId}}",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "v2", "drive", "files"],
+          "query": [
+            {
+              "key": "folder_id",
+              "value": "{{folderId}}"
+            }
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "Get Files by Type",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "moduleData",
+            "value": "{{moduleData}}",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v2/drive/files/by-type?file_type=document",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "v2", "drive", "files", "by-type"],
+          "query": [
+            {
+              "key": "file_type",
+              "value": "document"
+            }
+          ]
+        }
+      },
+      "response": [
+        {
+          "name": "Get Files by Type Success",
+          "originalRequest": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "moduleData",
+                "value": "934a93cdef3e6aa550a1f18ed87db20e0298c982058539417f56919361658e7c440042945616eb953cf3d2a6a770099d61c21572941067951ccab89f96d8d6f171ffac1cf6441748d9079cf43be976a9a122acca46b7b3d4b2dab23f705e27a8f10aeb04a3a07cd94d7681c225f9dbf1d6bb281fd7ab4eec09b11985fecf47e32bff6b4ff7fc9fc4a7b1f57184d613e97cc9a9afbfb903fe64f50ec68a7d17f4d0ec09cc86d65ddd10dde1c0b47c249c654dc5af16b769ece7008efe56fa27652d259984135e1ec1316bb74fc0fb268a99ca60b31481b538af36db916b40e709",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "http://localhost:8105/api/v2/drive/files/by-type?file_type=document",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "8105",
+              "path": ["api", "v2", "drive", "files", "by-type"],
+              "query": [
+                {
+                  "key": "file_type",
+                  "value": "document"
+                }
+              ]
+            }
+          },
+          "status": "OK",
+          "code": 200,
+          "_postman_previewlanguage": "json",
+          "header": [],
+          "cookie": [],
+          "body": "{\"status\":1,\"message\":\"files_by_type_fetched\",\"messageElements\":[],\"data\":[{\"_id\":\"68edfc97c89336ab1f98b7d6\",\"project_id\":\"68e8db196e85238284719072\",\"folder_id\":\"68edf728c89336ab1f98b792\",\"file_name\":\"updated_document.pdf\",\"file_path\":\"\",\"description\":\"Updated important PDF document with new content\",\"file_type\":\"document\",\"file_extension\":\"pdf\",\"file_size\":\"1024 KB\",\"file_size_bytes\":1048576,\"mime_type\":\"application/pdf\",\"is_active\":true,\"created_by\":\"68e8db196e852382847195c2\",\"updated_by\":\"68e8db196e852382847195c2\",\"uploaded_by\":\"68e8db196e852382847195c2\",\"deleted_on\":0,\"created_on\":1760427159474,\"updated_on\":1760427343986,\"__v\":0}]}"
+        }
+      ]
+    },
+    {
+      "name": "Get File by ID",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "moduleData",
+            "value": "{{moduleData}}",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v2/drive/files/{{fileId}}",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "v2", "drive", "files", "{{fileId}}"]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "Update File",
+      "request": {
+        "method": "PUT",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "moduleData",
+            "value": "{{moduleData}}",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"file_name\": \"updated_document.pdf\",\n  \"description\": \"Updated important PDF document with new content\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/v2/drive/files/{{fileId}}",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "v2", "drive", "files", "{{fileId}}"]
+        }
+      },
+      "response": [
+        {
+          "name": "Update File Success",
+          "originalRequest": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "moduleData",
+                "value": "934a93cdef3e6aa550a1f18ed87db20e0298c982058539417f56919361658e7c440042945616eb953cf3d2a6a770099d61c21572941067951ccab89f96d8d6f171ffac1cf6441748d9079cf43be976a9a122acca46b7b3d4b2dab23f705e27a8f10aeb04a3a07cd94d7681c225f9dbf1d6bb281fd7ab4eec09b11985fecf47e32bff6b4ff7fc9fc4a7b1f57184d613e97cc9a9afbfb903fe64f50ec68a7d17f4d0ec09cc86d65ddd10dde1c0b47c249c654dc5af16b769ece7008efe56fa27652d259984135e1ec1316bb74fc0fb268a99ca60b31481b538af36db916b40e709",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"file_name\": \"updated_document.pdf\",\n  \"description\": \"Updated important PDF document with new content\"\n}"
+            },
+            "url": {
+              "raw": "http://localhost:8105/api/v2/drive/files/68edfc97c89336ab1f98b7d6",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "8105",
+              "path": ["api", "v2", "drive", "files", "68edfc97c89336ab1f98b7d6"]
+            }
+          },
+          "status": "OK",
+          "code": 200,
+          "_postman_previewlanguage": "json",
+          "header": [],
+          "cookie": [],
+          "body": "{\"status\":1,\"message\":\"file_updated\",\"messageElements\":[],\"data\":{\"_id\":\"68edfc97c89336ab1f98b7d6\",\"project_id\":\"68e8db196e85238284719072\",\"folder_id\":null,\"file_name\":\"updated_document.pdf\",\"file_path\":\"\",\"description\":\"Updated important PDF document with new content\",\"file_type\":\"document\",\"file_extension\":\"pdf\",\"file_size\":\"1024 KB\",\"file_size_bytes\":1048576,\"mime_type\":\"application/pdf\",\"is_active\":true,\"created_by\":\"68e8db196e852382847195c2\",\"updated_by\":\"68e8db196e852382847195c2\",\"uploaded_by\":\"68e8db196e852382847195c2\",\"deleted_on\":0,\"created_on\":1760427159474,\"updated_on\":1760427326650,\"__v\":0}}"
+        }
+      ]
+    },
+    {
+      "name": "Move File to Folder",
+      "request": {
+        "method": "PUT",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "moduleData",
+            "value": "{{moduleData}}",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"target_folder_id\": \"{{folderId}}\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/v2/drive/files/{{fileId}}/move",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "v2", "drive", "files", "{{fileId}}", "move"]
+        }
+      },
+      "response": [
+        {
+          "name": "Move File Success",
+          "originalRequest": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "moduleData",
+                "value": "934a93cdef3e6aa550a1f18ed87db20e0298c982058539417f56919361658e7c440042945616eb953cf3d2a6a770099d61c21572941067951ccab89f96d8d6f171ffac1cf6441748d9079cf43be976a9a122acca46b7b3d4b2dab23f705e27a8f10aeb04a3a07cd94d7681c225f9dbf1d6bb281fd7ab4eec09b11985fecf47e32bff6b4ff7fc9fc4a7b1f57184d613e97cc9a9afbfb903fe64f50ec68a7d17f4d0ec09cc86d65ddd10dde1c0b47c249c654dc5af16b769ece7008efe56fa27652d259984135e1ec1316bb74fc0fb268a99ca60b31481b538af36db916b40e709",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"target_folder_id\": \"68edf728c89336ab1f98b792\"\n}"
+            },
+            "url": {
+              "raw": "http://localhost:8105/api/v2/drive/files/68edfc97c89336ab1f98b7d6/move",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "8105",
+              "path": ["api", "v2", "drive", "files", "68edfc97c89336ab1f98b7d6", "move"]
+            }
+          },
+          "status": "OK",
+          "code": 200,
+          "_postman_previewlanguage": "json",
+          "header": [],
+          "cookie": [],
+          "body": "{\"status\":1,\"message\":\"file_moved\",\"messageElements\":[],\"data\":{\"_id\":\"68edfc97c89336ab1f98b7d6\",\"project_id\":\"68e8db196e85238284719072\",\"folder_id\":\"68edf728c89336ab1f98b792\",\"file_name\":\"updated_document.pdf\",\"file_path\":\"\",\"description\":\"Updated important PDF document with new content\",\"file_type\":\"document\",\"file_extension\":\"pdf\",\"file_size\":\"1024 KB\",\"file_size_bytes\":1048576,\"mime_type\":\"application/pdf\",\"is_active\":true,\"created_by\":\"68e8db196e852382847195c2\",\"updated_by\":\"68e8db196e852382847195c2\",\"uploaded_by\":\"68e8db196e852382847195c2\",\"deleted_on\":0,\"created_on\":1760427159474,\"updated_on\":1760427343986,\"__v\":0}}"
+        }
+      ]
+    },
+    {
+      "name": "Delete File",
+      "request": {
+        "method": "DELETE",
+        "header": [
+          {
+            "key": "moduleData",
+            "value": "{{moduleData}}",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v2/drive/files/:fileId",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "v2", "drive", "files", ":fileId"],
+          "variable": [
+            {
+              "key": "fileId",
+              "value": "FILE_ID_TO_DELETE"
+            }
+          ]
+        }
+      },
+      "response": [
+        {
+          "name": "Delete File Success",
+          "originalRequest": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "moduleData",
+                "value": "934a93cdef3e6aa550a1f18ed87db20e0298c982058539417f56919361658e7c440042945616eb953cf3d2a6a770099d61c21572941067951ccab89f96d8d6f171ffac1cf6441748d9079cf43be976a9a122acca46b7b3d4b2dab23f705e27a8f10aeb04a3a07cd94d7681c225f9dbf1d6bb281fd7ab4eec09b11985fecf47e32bff6b4ff7fc9fc4a7b1f57184d613e97cc9a9afbfb903fe64f50ec68a7d17f4d0ec09cc86d65ddd10dde1c0b47c249c654dc5af16b769ece7008efe56fa27652d259984135e1ec1316bb74fc0fb268a99ca60b31481b538af36db916b40e709",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "http://localhost:8105/api/v2/drive/files/68edfda38c31b1366be52109",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "8105",
+              "path": ["api", "v2", "drive", "files", "68edfda38c31b1366be52109"]
+            }
+          },
+          "status": "OK",
+          "code": 200,
+          "_postman_previewlanguage": "json",
+          "header": [],
+          "cookie": [],
+          "body": "{\"status\":1,\"message\":\"file_deleted\",\"messageElements\":[],\"data\":{\"message\":\"File deleted successfully\"}}"
+        }
+      ]
+    }
+  ]
+}

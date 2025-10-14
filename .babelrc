@@ -1,0 +1,44 @@
+{
+  "sourceType": "unambiguous",
+  "plugins": [
+    "@babel/transform-runtime",
+    "@babel/plugin-transform-class-properties",
+    "@babel/plugin-syntax-dynamic-import"
+  ],
+  "env": {
+    "dev": {
+      "presets": [
+        [
+          "@babel/preset-env",
+          {
+            "targets": {
+              "node": "current",
+              "esmodules": true
+            }
+          }
+        ]
+      ]
+    },
+    "prod": {
+      "presets": [
+        ["minify", {
+          "builtIns": false,
+          "evaluate": false,
+          "mangle": false
+        }],
+        [
+          "@babel/preset-env",
+          {
+            "targets": {
+              "node": "current",
+              "esmodules": true
+            }
+          }
+        ]
+      ]
+    }
+  },
+  "ignore": [
+    "**/*.test.js"
+  ]
+}

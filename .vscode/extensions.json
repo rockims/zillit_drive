@@ -1,0 +1,10 @@
+{
+  "recommendations": [
+    "dbaeumer.vscode-eslint",
+    "wesbos.theme-cobalt2",
+    "formulahendry.auto-rename-tag",
+    "visualstudioexptteam.vscodeintellicode",
+    "visualstudioexptteam.intellicode-api-usage-examples",
+    "christian-kohler.path-intellisense"
+  ]
+}
