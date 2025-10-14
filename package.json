@@ -1,5 +1,5 @@
 {
-  "name": "server-boilerplate",
+  "name": "zillit-drive",
   "version": "1.0.0",
   "description": "",
   "main": "index.js",
@@ -20,7 +20,7 @@
     "exclude": "**/*.test.js"
   },
   "keywords": [],
-  "author": "Manish Mahant",
+  "author": "Shubham Singh",
   "license": "ISC",
   "dependencies": {
     "@aws-sdk/client-s3": "^3.421.0",

@@ -1,10 +1,9 @@
 import BadRequest from 'zillit-libs/errors/BadRequest';
-import DriveFileRepository from '../../repositories/v2/driveFile.js';
-import DriveFolderRepository from '../../repositories/v2/driveFolder.js';
 import NotificationService from 'zillit-libs/services/NotificationService';
-import NotificationRepository from 'zillit-libs/repositories/NotificationRepository';
 import rights from 'zillit-libs/services/rights';
-import socketClient from '../../config/socketClient.js';
+import DriveFileRepository from '../../repositories/v2/driveFile';
+import DriveFolderRepository from '../../repositories/v2/driveFolder';
+import socketClient from '../../config/socketClient';
 
 const {
   sections, tools, units,
@@ -18,14 +17,16 @@ const _viewingRightsUsers = async (project) => {
   return usersWithRights.filter((item) => item.view_access).map((item) => item.user_id.toString());
 };
 
-const createFile = async ({ user, project, device, body, query }) => {
+const createFile = async ({
+  user, project, body,
+}) => {
   // Trim and normalize the file name for duplicate checking
   const normalizedFileName = body.file_name.trim().toLowerCase();
 
   // If folder_id is provided, verify folder exists
   if (body.folder_id) {
     const folder = await DriveFolderRepository.getFolder({
-      filters: { _id: body.folder_id, project_id: project._id, deleted_on: 0 }
+      filters: { _id: body.folder_id, project_id: project._id, deleted_on: 0 },
     });
 
     if (!folder) {
@@ -43,9 +44,7 @@ const createFile = async ({ user, project, device, body, query }) => {
   const existingFiles = await DriveFileRepository.getFiles({ filters });
 
   // Check for duplicate file name (case-insensitive) in the same folder
-  const duplicateFile = existingFiles.find(file =>
-    file.file_name.trim().toLowerCase() === normalizedFileName
-  );
+  const duplicateFile = existingFiles.find((file) => file.file_name.trim().toLowerCase() === normalizedFileName);
 
   if (duplicateFile) {
     throw new BadRequest('duplicate_file_name');
@@ -91,7 +90,7 @@ const createFile = async ({ user, project, device, body, query }) => {
   return file;
 };
 
-const getFiles = async ({ user, project, query }) => {
+const getFiles = async ({ project, query }) => {
   const filters = {
     project_id: project._id,
     deleted_on: 0,
@@ -136,7 +135,9 @@ const getFile = async ({ project, params }) => {
   return file;
 };
 
-const updateFile = async ({ user, project, device, params, body }) => {
+const updateFile = async ({
+  user, project, params, body,
+}) => {
   const fileId = params.fileId || body.file_id;
 
   if (!fileId) {
@@ -158,7 +159,7 @@ const updateFile = async ({ user, project, device, params, body }) => {
   // If updating folder_id, verify new folder exists
   if (body.folder_id && body.folder_id !== existingFile.folder_id?.toString()) {
     const folder = await DriveFolderRepository.getFolder({
-      filters: { _id: body.folder_id, project_id: project._id, deleted_on: 0 }
+      filters: { _id: body.folder_id, project_id: project._id, deleted_on: 0 },
     });
 
     if (!folder) {
@@ -175,14 +176,12 @@ const updateFile = async ({ user, project, device, params, body }) => {
       project_id: project._id,
       folder_id: targetFolderId,
       deleted_on: 0,
-      _id: { $ne: fileId } // Exclude current file from duplicate check
+      _id: { $ne: fileId }, // Exclude current file from duplicate check
     };
 
     const existingFiles = await DriveFileRepository.getFiles({ filters: duplicateFilters });
 
-    const duplicateFile = existingFiles.find(file =>
-      file.file_name.trim().toLowerCase() === normalizedFileName
-    );
+    const duplicateFile = existingFiles.find((file) => file.file_name.trim().toLowerCase() === normalizedFileName);
 
     if (duplicateFile) {
       throw new BadRequest('duplicate_file_name');
@@ -190,10 +189,10 @@ const updateFile = async ({ user, project, device, params, body }) => {
   }
 
   // Remove file_id from body if it exists (shouldn't be in update data)
-  const { file_id, ...bodyWithoutFileId } = body;
+  const { file_id: fileIdFromBody, ...bodyWithoutFileId } = body;
 
   // Update file extension if file name is changed
-  let updateData = {
+  const updateData = {
     ...bodyWithoutFileId,
     updated_by: user._id,
     updated_on: Date.now(),
@@ -236,7 +235,9 @@ const updateFile = async ({ user, project, device, params, body }) => {
   return updatedFile;
 };
 
-const deleteFile = async ({ user, project, device, params }) => {
+const deleteFile = async ({
+  user, project, params,
+}) => {
   const filters = {
     _id: params.fileId,
     project_id: project._id,
@@ -287,9 +288,11 @@ const deleteFile = async ({ user, project, device, params }) => {
   return { message: 'File deleted successfully' };
 };
 
-const moveFile = async ({ user, project, device, params, body }) => {
+const moveFile = async ({
+  user, project, params, body,
+}) => {
   const { fileId } = params;
-  const { target_folder_id } = body;
+  const { target_folder_id: targetFolderId } = body;
 
   const filters = {
     _id: fileId,
@@ -304,9 +307,9 @@ const moveFile = async ({ user, project, device, params, body }) => {
   }
 
   // If target_folder_id is provided, verify folder exists
-  if (target_folder_id) {
+  if (targetFolderId) {
     const targetFolder = await DriveFolderRepository.getFolder({
-      filters: { _id: target_folder_id, project_id: project._id, deleted_on: 0 }
+      filters: { _id: targetFolderId, project_id: project._id, deleted_on: 0 },
     });
 
     if (!targetFolder) {
@@ -317,15 +320,13 @@ const moveFile = async ({ user, project, device, params, body }) => {
   // Check for duplicate file name in target folder
   const duplicateFilters = {
     project_id: project._id,
-    folder_id: target_folder_id || null,
+    folder_id: targetFolderId || null,
     deleted_on: 0,
-    _id: { $ne: fileId }
+    _id: { $ne: fileId },
   };
 
   const existingFiles = await DriveFileRepository.getFiles({ filters: duplicateFilters });
-  const duplicateFile = existingFiles.find(existingFile =>
-    existingFile.file_name.trim().toLowerCase() === file.file_name.trim().toLowerCase()
-  );
+  const duplicateFile = existingFiles.find((existingFile) => existingFile.file_name.trim().toLowerCase() === file.file_name.trim().toLowerCase());
 
   if (duplicateFile) {
     throw new BadRequest('duplicate_file_name_in_target_folder');
@@ -333,7 +334,7 @@ const moveFile = async ({ user, project, device, params, body }) => {
 
   // Move file to new folder
   const updateData = {
-    folder_id: target_folder_id || null,
+    folder_id: targetFolderId || null,
     updated_by: user._id,
     updated_on: Date.now(),
   };
@@ -367,15 +368,15 @@ const moveFile = async ({ user, project, device, params, body }) => {
 };
 
 const getFilesByType = async ({ project, query }) => {
-  const { file_type } = query;
+  const { file_type: fileType } = query;
 
-  if (!file_type) {
+  if (!fileType) {
     throw new BadRequest('file_type_required');
   }
 
   const filters = {
     project_id: project._id,
-    file_type: file_type,
+    file_type: fileType,
     deleted_on: 0,
   };
 

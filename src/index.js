@@ -1,17 +1,11 @@
 import fs from 'fs';
-// import os from 'node:os';
-// import cluster from 'node:cluster';
-// import { dirname } from 'path';
 import process from 'node:process';
 import { createServer } from 'node:http';
-// import { fileURLToPath } from 'url';
 
 import dotenv from 'dotenv';
 
 import { mongodbConnect } from 'zillit-libs/config';
 import app from './app';
-
-// const __dirname = dirname(fileURLToPath(import.meta.url));
 
 dotenv.config();
 
