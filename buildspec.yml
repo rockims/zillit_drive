@@ -1,0 +1,35 @@
+version: 0.2
+
+env:
+  parameter-store:
+    ssh_key: "/codepipeline/ssh_key"
+    docker_user: "/codepipeline/docker_user"
+
+phases:
+  pre_build:
+    commands:
+      - echo Logging in to Amazon ECR...
+      - pip install --upgrade awscli==$AWS_CLI_VERSION
+      - docker logout
+      - aws ecr get-login-password --region "$AWS_DEFAULT_REGION" | docker login --username "$docker_user" --password-stdin "$AWS_ACCOUNT_ID".dkr.ecr."$AWS_DEFAULT_REGION".amazonaws.com
+      - REPOSITORY_URI="$AWS_ACCOUNT_ID".dkr.ecr."$AWS_DEFAULT_REGION".amazonaws.com/"$AWS_ECR_NAME"
+      - Image_Tag=latest
+  build:
+    commands:
+      - echo Build started on `date`
+      - echo Building the Docker image...
+      - docker --version
+      - echo $CODEBUILD_SRC_DIR
+      - docker build -f Dockerfile --build-arg LIB_BRANCH="$LIB_BRANCH" --build-arg ssh_key="$ssh_key" -t $AWS_ECR_NAME .
+      - docker tag $AWS_ECR_NAME:$Image_Tag $REPOSITORY_URI:$Image_Tag
+  post_build:
+    commands:
+      - echo Build completed on `date`
+      - echo Pushing the Docker images...
+      - docker push $REPOSITORY_URI:$Image_Tag
+      - echo Writing image definitions file...
+      - printf '[{"name":"%s","imageUri":"%s"}]' $AWS_CONTAINER_NAME $REPOSITORY_URI:$Image_Tag > imagedefinitions.json
+      - cat imagedefinitions.json
+artifacts:
+    files: imagedefinitions.json
+    base-directory: ./
