@@ -47,9 +47,9 @@ const createFile = async ({ user, project, device, body, query }) => {
     file.file_name.trim().toLowerCase() === normalizedFileName
   );
 
-  if (duplicateFile) {
-    throw new BadRequest('duplicate_file_name');
-  }
+  // if (duplicateFile) {
+  //   throw new BadRequest('duplicate_file_name');
+  // }
 
   // Extract file extension from file name
   const fileExtension = body.file_name.split('.').pop().toLowerCase();
