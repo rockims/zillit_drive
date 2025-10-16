@@ -82,10 +82,14 @@ const createFile = async ({ user, project, device, body, query }) => {
   });
 
   // Emit socket event for real-time updates
-  await socketClient.socketToRoom({
-    room: project._id.toString(),
-    emit: 'file:added',
-    data: { file, project: project._id },
+  socketClient('__admin_events__', {
+    event: 'file:added',
+    room: `${project._id.toString()}_room`,
+    data: {
+      project_id: project._id,
+      device_id: device._id,
+      file: file,
+    },
   });
 
   return file;
@@ -227,10 +231,14 @@ const updateFile = async ({ user, project, device, params, body }) => {
   });
 
   // Emit socket event for real-time updates
-  await socketClient.socketToRoom({
-    room: project._id.toString(),
-    emit: 'file:updated',
-    data: { file: updatedFile, project: project._id },
+  socketClient('__admin_events__', {
+    event: 'file:updated',
+    room: `${project._id.toString()}_room`,
+    data: {
+      project_id: project._id,
+      device_id: device._id,
+      file: updatedFile,
+    },
   });
 
   return updatedFile;
@@ -257,7 +265,7 @@ const deleteFile = async ({ user, project, device, params }) => {
   };
 
   // Get file data before deletion for notification
-  const fileToDelete = await DriveFileRepository.getFileDocument({ filters });
+  const fileToDelete = await DriveFileRepository.getFile({ filters });
 
   await DriveFileRepository.deleteFile({ filters, data: deleteData });
 
@@ -278,10 +286,14 @@ const deleteFile = async ({ user, project, device, params }) => {
   });
 
   // Emit socket event for real-time updates
-  await socketClient.socketToRoom({
-    room: project._id.toString(),
-    emit: 'file:deleted',
-    data: { file: fileToDelete, project: project._id },
+  socketClient('__admin_events__', {
+    event: 'file:deleted',
+    room: `${project._id.toString()}_room`,
+    data: {
+      project_id: project._id,
+      device_id: device._id,
+      file: fileToDelete,
+    },
   });
 
   return { message: 'File deleted successfully' };
@@ -357,10 +369,14 @@ const moveFile = async ({ user, project, device, params, body }) => {
   });
 
   // Emit socket event for real-time updates
-  await socketClient.socketToRoom({
-    room: project._id.toString(),
-    emit: 'file:moved',
-    data: { file: movedFile, project: project._id },
+  socketClient('__admin_events__', {
+    event: 'file:moved',
+    room: `${project._id.toString()}_room`,
+    data: {
+      project_id: project._id,
+      device_id: device._id,
+      file: movedFile,
+    },
   });
 
   return movedFile;

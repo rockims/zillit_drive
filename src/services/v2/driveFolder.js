@@ -75,24 +75,28 @@ const createFolder = async ({ user, project, device, body, query }) => {
   // Get users with view access to the drive tool
   const usersIds = await _viewingRightsUsers(project);
 
-  // Send notification to users with view access
-  await NotificationService.notifyAll({
-    data: folder,
-    sectionId: sections.PROJECT,
-    toolId: tools.DRIVE,
-    unitId: units.FOLDER,
-    message: `New folder "${folder.name}" created in ${project.name}`,
-    receiverIds: usersIds,
-    senderId: folder.created_by,
-    projectId: project._id,
-    organizationId: project.organization,
-  });
+  // // Send notification to users with view access
+  // await NotificationService.notifyAll({
+  //   data: folder,
+  //   sectionId: sections.PROJECT,
+  //   toolId: tools.DRIVE,
+  //   unitId: units.FOLDER,
+  //   message: `New folder "${folder.name}" created in ${project.name}`,
+  //   receiverIds: usersIds,
+  //   senderId: folder.created_by,
+  //   projectId: project._id,
+  //   organizationId: project.organization,
+  // });
 
   // Emit socket event for real-time updates
-  await socketClient.socketToRoom({
-    room: project._id.toString(),
-    emit: 'folder:added',
-    data: { folder, project: project._id },
+  socketClient('__admin_events__', {
+    event: 'folder:added',
+    room: `${project._id.toString()}_room`,
+    data: {
+      project_id: project._id,
+      device_id: device._id,
+      folder: folder,
+    },
   });
 
   return folder;
@@ -217,10 +221,14 @@ const updateFolder = async ({ user, project, device, params, body }) => {
   });
 
   // Emit socket event for real-time updates
-  await socketClient.socketToRoom({
-    room: project._id.toString(),
-    emit: 'folder:updated',
-    data: { folder: updatedFolder, project: project._id },
+  socketClient('__admin_events__', {
+    event: 'folder:updated',
+    room: `${project._id.toString()}_room`,
+    data: {
+      project_id: project._id,
+      device_id: device._id,
+      folder: updatedFolder,
+    },
   });
 
   return updatedFolder;
@@ -287,7 +295,7 @@ const deleteFolder = async ({ user, project, device, params }) => {
   }
 
   // Get folder data before deletion for notification
-  const folderToDelete = await DriveFolderRepository.getFolderDocument({ filters });
+  const folderToDelete = await DriveFolderRepository.getFolder({ filters });
 
   // Finally delete the folder itself
   await DriveFolderRepository.deleteFolder({ filters, data: deleteData });
@@ -309,10 +317,14 @@ const deleteFolder = async ({ user, project, device, params }) => {
   });
 
   // Emit socket event for real-time updates
-  await socketClient.socketToRoom({
-    room: project._id.toString(),
-    emit: 'folder:deleted',
-    data: { folder: folderToDelete, project: project._id },
+  socketClient('__admin_events__', {
+    event: 'folder:deleted',
+    room: `${project._id.toString()}_room`,
+    data: {
+      project_id: project._id,
+      device_id: device._id,
+      folder: folderToDelete,
+    },
   });
 
   return {
