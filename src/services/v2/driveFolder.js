@@ -36,9 +36,9 @@ const createFolder = async ({ user, project, device, body, query }) => {
     folder.folder_name.trim().toLowerCase() === normalizedFolderName
   );
 
-  if (duplicateFolder) {
-    throw new BadRequest('duplicate_folder_name');
-  }
+  // if (duplicateFolder) {
+  //   throw new BadRequest('duplicate_folder_name');
+  // }
 
   // Build folder path based on parent folder
   let folderPath = '';

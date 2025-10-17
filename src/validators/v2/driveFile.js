@@ -1,14 +1,20 @@
 import Joi from 'joi-oid';
 
 const attachmentSchema = Joi.object({
-  url: Joi.string().allow('').optional(),
+  media: Joi.string().allow('').optional(),
+  name: Joi.string().allow('').optional(),
+  thumbnail: Joi.string().allow('').optional(),
+  content_type: Joi.string().allow('').optional(),
+  content_subtype: Joi.string().allow('').optional(),
+  caption: Joi.string().allow('').optional(),
+  duration: Joi.number().optional(),
+  height: Joi.number().optional(),
+  width: Joi.number().optional(),
   bucket: Joi.string().allow('').optional(),
-  key: Joi.string().allow('').optional(),
-  cdn_url: Joi.string().allow('').optional(),
-  original_name: Joi.string().allow('').optional(),
-  size: Joi.number().optional(),
-  mime_type: Joi.string().allow('').optional(),
-  encoding: Joi.string().allow('').optional(),
+  region: Joi.string().allow('').optional(),
+  created: Joi.number().optional(),
+  file_size: Joi.string().allow('').optional(),
+  content_id: Joi.string().allow('').optional(),
 });
 
 const createFile = Joi.object({
@@ -37,6 +43,11 @@ const createFile = Joi.object({
     return err;
   }),
 
+  file_extension: Joi.string().allow('').optional().error((err) => {
+    err[0].message = 'file_extension_validation';
+    return err;
+  }),
+
   file_size: Joi.string().allow('').optional().error((err) => {
     err[0].message = 'file_size_validation';
     return err;
@@ -52,8 +63,8 @@ const createFile = Joi.object({
     return err;
   }),
 
-  attachment: attachmentSchema.optional().error((err) => {
-    err[0].message = 'attachment_validation';
+  attachments: Joi.array().items(attachmentSchema).optional().error((err) => {
+    err[0].message = 'attachments_validation';
     return err;
   }),
 });
@@ -89,6 +100,11 @@ const updateFile = Joi.object({
     return err;
   }),
 
+  file_extension: Joi.string().allow('').optional().error((err) => {
+    err[0].message = 'file_extension_validation';
+    return err;
+  }),
+
   file_size: Joi.string().allow('').optional().error((err) => {
     err[0].message = 'file_size_validation';
     return err;
@@ -104,8 +120,8 @@ const updateFile = Joi.object({
     return err;
   }),
 
-  attachment: attachmentSchema.optional().error((err) => {
-    err[0].message = 'attachment_validation';
+  attachments: Joi.array().items(attachmentSchema).optional().error((err) => {
+    err[0].message = 'attachments_validation';
     return err;
   }),
 });
