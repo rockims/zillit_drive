@@ -1,0 +1,595 @@
+{
+  "info": {
+    "name": "Zillit Drive API Collection",
+    "description": "Comp              "raw": "{{baseUrl}}/api/v2/drive/folders?parent_folder_id=",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v2", "drive", "folders"],
+              "query": [
+                {
+                  "key": "parent_folder_id",
+                  "value": "",
+                  "description": "Parent folder ID to filter by"
+                }
+              ]n for Zillit Drive - Folder and File management operations",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "version": "2.0.0"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8105",
+      "type": "string"
+    },
+    {
+      "key": "moduledata",
+      "value": "9bf45a428070559f3376f051dd8877f1cdc26fed18a17e5d9f05337339f17aaa2dcb4c3474635573f852906b03eeab055b53675d1c163c04a58173d85a4fba3bc24b2494c14e2f943e44738ecfe9dab8818d7fe7a9ac6ecbd9bffa85e295cd4f8f288371124b3e34ff5989b589685eb975bc1eb34020fb1924b72e64c1fd4d73f9e439c1ab7104103a2f2094f8ff6e40349954d10bee1fde2f9df25fd019413b",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Drive Folders",
+      "item": [
+        {
+          "name": "Create Folder",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "moduledata",
+                "value": "{{moduledata}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"folder_name\": \"My Documents\",          // string, required - Name of the folder\n  \"parent_folder_id\": null,               // string (ObjectId) or null, optional - Parent folder ID\n  \"description\": \"Main documents folder\", // string, optional - Folder description\n  \"attachments\": [                        // array, optional - Array of attachment objects\n    {\n      \"media\": \"https://example.com/thumbnail.jpg\",  // string, optional - Media URL\n      \"name\": \"folder_thumbnail\",                     // string, optional - Attachment name\n      \"thumbnail\": \"https://example.com/thumb.jpg\",  // string, optional - Thumbnail URL\n      \"content_type\": \"image\",                        // string, optional - Content type (document/image/audio/video)\n      \"content_subtype\": \"jpeg\",                      // string, optional - Content subtype\n      \"caption\": \"Folder thumbnail\",                  // string, optional - Caption text\n      \"duration\": 0,                                  // number, optional - Duration for media files\n      \"height\": 150,                                  // number, optional - Height in pixels\n      \"width\": 150,                                   // number, optional - Width in pixels\n      \"bucket\": \"zillit-bucket\",                      // string, optional - S3 bucket name\n      \"region\": \"us-east-1\",                          // string, optional - AWS region\n      \"created\": 1697462400000,                       // number, optional - Creation timestamp\n      \"file_size\": \"2KB\",                             // string, optional - Human readable file size\n      \"content_id\": \"content_123\"                     // string, optional - Content identifier\n    }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v2/drive/folders",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v2", "drive", "folders"]
+            }
+          },
+          "response": [
+            {
+              "name": "Success Response",
+              "originalRequest": {
+                "method": "POST",
+                "header": [],
+                "body": {
+                  "mode": "raw",
+                  "raw": ""
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/api/v2/drive-folders/",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "v2", "drive-folders", ""]
+                }
+              },
+              "status": "Created",
+              "code": 201,
+              "header": [],
+              "body": "{\n  \"success\": true,\n  \"message\": \"folder_created\",\n  \"data\": {\n    \"_id\": \"654321098765432109876543\",\n    \"folder_name\": \"My Documents\",\n    \"parent_folder_id\": null,\n    \"description\": \"Main documents folder\",\n    \"project_id\": \"123456789012345678901234\",\n    \"user_id\": \"987654321098765432109876\",\n    \"created_at\": \"2024-01-15T10:30:00.000Z\",\n    \"updated_at\": \"2024-01-15T10:30:00.000Z\",\n    \"attachments\": [\n      {\n        \"media\": \"https://example.com/thumbnail.jpg\",\n        \"name\": \"folder_thumbnail\",\n        \"content_type\": \"image\",\n        \"content_subtype\": \"jpeg\",\n        \"caption\": \"Folder thumbnail\",\n        \"width\": 150,\n        \"height\": 150,\n        \"file_size\": \"2KB\"\n      }\n    ]\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "Get All Folders",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "moduledata",
+                "value": "{{moduledata}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v2/drive/folders?parent_folder_id=",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v2", "drive", "folders"],
+              "query": [
+                {
+                  "key": "parent_folder_id",
+                  "value": "",
+                  "description": "Filter by parent folder ID (optional)"
+                }
+              ]
+            }
+          },
+          "response": [
+            {
+              "name": "Success Response",
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/v2/drive-folders/",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "v2", "drive-folders", ""]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "header": [],
+              "body": "{\n  \"success\": true,\n  \"message\": \"folders_fetched\",\n  \"data\": {\n    \"folders\": [\n      {\n        \"_id\": \"654321098765432109876543\",\n        \"folder_name\": \"My Documents\",\n        \"parent_folder_id\": null,\n        \"description\": \"Main documents folder\",\n        \"project_id\": \"123456789012345678901234\",\n        \"user_id\": \"987654321098765432109876\",\n        \"created_at\": \"2024-01-15T10:30:00.000Z\",\n        \"updated_at\": \"2024-01-15T10:30:00.000Z\"\n      },\n      {\n        \"_id\": \"654321098765432109876544\",\n        \"folder_name\": \"Images\",\n        \"parent_folder_id\": \"654321098765432109876543\",\n        \"description\": \"Image files folder\",\n        \"project_id\": \"123456789012345678901234\",\n        \"user_id\": \"987654321098765432109876\",\n        \"created_at\": \"2024-01-15T11:00:00.000Z\",\n        \"updated_at\": \"2024-01-15T11:00:00.000Z\"\n      }\n    ],\n    \"pagination\": {\n      \"current_page\": 1,\n      \"total_pages\": 1,\n      \"total_count\": 2,\n      \"per_page\": 10\n    }\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "Get Specific Folder",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "moduledata",
+                "value": "{{moduledata}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v2/drive/folders/654321098765432109876543",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v2", "drive", "folders", "654321098765432109876543"]
+            }
+          },
+          "response": [
+            {
+              "name": "Success Response",
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/v2/drive-folders/654321098765432109876543",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "v2", "drive-folders", "654321098765432109876543"]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "header": [],
+              "body": "{\n  \"success\": true,\n  \"message\": \"folder_fetched\",\n  \"data\": {\n    \"_id\": \"654321098765432109876543\",\n    \"folder_name\": \"My Documents\",\n    \"parent_folder_id\": null,\n    \"description\": \"Main documents folder\",\n    \"project_id\": \"123456789012345678901234\",\n    \"user_id\": \"987654321098765432109876\",\n    \"created_at\": \"2024-01-15T10:30:00.000Z\",\n    \"updated_at\": \"2024-01-15T10:30:00.000Z\",\n    \"attachments\": []\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "Get Folder Contents",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "moduledata",
+                "value": "{{moduledata}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v2/drive/folders/654321098765432109876543/contents",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v2", "drive", "folders", "654321098765432109876543", "contents"]
+            }
+          },
+          "response": [
+            {
+              "name": "Success Response",
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/v2/drive-folders/654321098765432109876543/contents",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "v2", "drive-folders", "654321098765432109876543", "contents"]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "header": [],
+              "body": "{\n  \"success\": true,\n  \"message\": \"folder_contents_fetched\",\n  \"data\": {\n    \"folders\": [\n      {\n        \"_id\": \"654321098765432109876544\",\n        \"folder_name\": \"Images\",\n        \"parent_folder_id\": \"654321098765432109876543\",\n        \"description\": \"Image files folder\",\n        \"created_at\": \"2024-01-15T11:00:00.000Z\"\n      }\n    ],\n    \"files\": [\n      {\n        \"_id\": \"765432109876543210987654\",\n        \"file_name\": \"document.pdf\",\n        \"folder_id\": \"654321098765432109876543\",\n        \"file_type\": \"pdf\",\n        \"file_size\": \"2.5MB\",\n        \"created_at\": \"2024-01-15T12:00:00.000Z\"\n      }\n    ],\n    \"pagination\": {\n      \"current_page\": 1,\n      \"total_pages\": 1,\n      \"total_count\": 2\n    }\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "Update Folder",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "moduledata",
+                "value": "{{moduledata}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"folder_id\": \"654321098765432109876543\",           // string (ObjectId), optional - Folder ID for validation\n  \"folder_name\": \"Updated Documents\",                // string, optional - New folder name\n  \"description\": \"Updated description for documents folder\", // string, optional - Updated description\n  \"parent_folder_id\": null,                          // string (ObjectId) or null, optional - New parent folder ID\n  \"attachments\": [                                   // array, optional - Updated attachments array\n    {\n      \"media\": \"https://example.com/new-thumb.jpg\", // string, optional - Updated media URL\n      \"name\": \"updated_thumbnail\",                   // string, optional - Updated attachment name\n      \"content_type\": \"image\",                       // string, optional - Content type\n      \"content_subtype\": \"png\",                      // string, optional - Content subtype\n      \"caption\": \"Updated thumbnail\",                // string, optional - Updated caption\n      \"height\": 200,                                 // number, optional - Updated height\n      \"width\": 200,                                  // number, optional - Updated width\n      \"file_size\": \"3KB\"                             // string, optional - Updated file size\n    }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v2/drive/folders/654321098765432109876543",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v2", "drive", "folders", "654321098765432109876543"]
+            }
+          },
+          "response": [
+            {
+              "name": "Success Response",
+              "originalRequest": {
+                "method": "PUT",
+                "header": [],
+                "body": {
+                  "mode": "raw",
+                  "raw": ""
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/api/v2/drive-folders/654321098765432109876543",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "v2", "drive-folders", "654321098765432109876543"]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "header": [],
+              "body": "{\n  \"success\": true,\n  \"message\": \"folder_updated\",\n  \"data\": {\n    \"_id\": \"654321098765432109876543\",\n    \"folder_name\": \"Updated Documents\",\n    \"parent_folder_id\": null,\n    \"description\": \"Updated description for documents folder\",\n    \"project_id\": \"123456789012345678901234\",\n    \"user_id\": \"987654321098765432109876\",\n    \"created_at\": \"2024-01-15T10:30:00.000Z\",\n    \"updated_at\": \"2024-01-15T14:30:00.000Z\"\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "Delete Folder",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "moduledata",
+                "value": "{{moduledata}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v2/drive/folders/654321098765432109876543?force=false",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v2", "drive", "folders", "654321098765432109876543"],
+              "query": [
+                {
+                  "key": "force",
+                  "value": "false",
+                  "description": "Force delete even if folder contains files/subfolders"
+                }
+              ]
+            }
+          },
+          "response": [
+            {
+              "name": "Success Response",
+              "originalRequest": {
+                "method": "DELETE",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/v2/drive-folders/654321098765432109876543",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "v2", "drive-folders", "654321098765432109876543"]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "header": [],
+              "body": "{\n  \"success\": true,\n  \"message\": \"folder_deleted\",\n  \"data\": {\n    \"deleted_folder_id\": \"654321098765432109876543\",\n    \"deleted_at\": \"2024-01-15T15:00:00.000Z\"\n  }\n}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Drive Files",
+      "item": [
+        {
+          "name": "Create File",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "moduledata",
+                "value": "{{moduledata}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"file_name\": \"project_report.pdf\",                 // string, required - Name of the file\n  \"folder_id\": \"654321098765432109876543\",           // string (ObjectId) or null, optional - Parent folder ID\n  \"file_path\": \"/documents/reports/\",                // string, optional - File path/location\n  \"description\": \"Monthly project report\",          // string, optional - File description\n  \"file_type\": \"pdf\",                               // string, optional - File type (pdf, doc, jpg, etc.)\n  \"file_extension\": \"pdf\",                          // string, optional - File extension\n  \"file_size\": \"2.5MB\",                             // string, optional - Human readable file size\n  \"file_size_bytes\": 2621440,                       // number, optional - File size in bytes\n  \"mime_type\": \"application/pdf\",                   // string, optional - MIME type\n  \"attachments\": [                                  // array, optional - File attachments array (based on attachmentSchema)\n    {\n      \"media\": \"https://s3.amazonaws.com/bucket/file.pdf\",        // string, optional - File URL/media path\n      \"name\": \"project_report.pdf\",                               // string, optional - Attachment name\n      \"thumbnail\": \"https://cdn.zillit.com/thumbs/report_thumb.jpg\", // string, optional - Thumbnail URL\n      \"content_type\": \"document\",                                  // string, optional - Content type (document, image, audio, video)\n      \"content_subtype\": \"pdf\",                                   // string, optional - Exact extension of attachment\n      \"caption\": \"Monthly project report\",                        // string, optional - Attachment caption\n      \"duration\": 0,                                              // number, optional - Duration for media files\n      \"height\": 0,                                                // number, optional - Height for images/videos\n      \"width\": 0,                                                 // number, optional - Width for images/videos\n      \"bucket\": \"zillit-drive-files\",                             // string, optional - S3 bucket name\n      \"region\": \"us-east-1\",                                      // string, optional - S3 region\n      \"created\": 1705334400000,                                   // number, optional - Creation timestamp\n      \"file_size\": \"2.5MB\",                                       // string, optional - Human readable file size\n      \"content_id\": \"drive_file_123\"                              // string, optional - Content identifier\n    }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v2/drive/files",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v2", "drive", "files"]
+            }
+          },
+          "response": [
+            {
+              "name": "Success Response",
+              "originalRequest": {
+                "method": "POST",
+                "header": [],
+                "body": {
+                  "mode": "raw",
+                  "raw": ""
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/api/v2/drive-files/",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "v2", "drive-files", ""]
+                }
+              },
+              "status": "Created",
+              "code": 201,
+              "header": [],
+              "body": "{\n  \"success\": true,\n  \"message\": \"file_created\",\n  \"data\": {\n    \"_id\": \"765432109876543210987654\",\n    \"file_name\": \"project_report.pdf\",\n    \"folder_id\": \"654321098765432109876543\",\n    \"file_path\": \"/documents/reports/\",\n    \"description\": \"Monthly project report\",\n    \"file_type\": \"pdf\",\n    \"file_size\": \"2.5MB\",\n    \"file_size_bytes\": 2621440,\n    \"mime_type\": \"application/pdf\",\n    \"project_id\": \"123456789012345678901234\",\n    \"user_id\": \"987654321098765432109876\",\n    \"created_at\": \"2024-01-15T12:00:00.000Z\",\n    \"updated_at\": \"2024-01-15T12:00:00.000Z\",\n    \"attachment\": {\n      \"url\": \"https://s3.amazonaws.com/bucket/file.pdf\",\n      \"bucket\": \"zillit-drive-files\",\n      \"key\": \"files/project_report_123.pdf\",\n      \"cdn_url\": \"https://cdn.zillit.com/files/project_report_123.pdf\",\n      \"original_name\": \"project_report.pdf\",\n      \"size\": 2621440,\n      \"mime_type\": \"application/pdf\",\n      \"encoding\": \"utf-8\"\n    }\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "Get All Files",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "moduledata",
+                "value": "{{moduledata}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v2/drive/files?folder_id=654321098765432109876543&file_type=pdf",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v2", "drive", "files"],
+              "query": [
+                {
+                  "key": "folder_id",
+                  "value": "654321098765432109876543",
+                  "description": "Filter by folder ID (optional)"
+                },
+                {
+                  "key": "file_type",
+                  "value": "pdf",
+                  "description": "Filter by file type (optional)"
+                }
+              ]
+            }
+          },
+          "response": [
+            {
+              "name": "Success Response",
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/v2/drive-files/",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "v2", "drive-files", ""]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "header": [],
+              "body": "{\n  \"success\": true,\n  \"message\": \"files_fetched\",\n  \"data\": {\n    \"files\": [\n      {\n        \"_id\": \"765432109876543210987654\",\n        \"file_name\": \"project_report.pdf\",\n        \"folder_id\": \"654321098765432109876543\",\n        \"file_path\": \"/documents/reports/\",\n        \"description\": \"Monthly project report\",\n        \"file_type\": \"pdf\",\n        \"file_size\": \"2.5MB\",\n        \"file_size_bytes\": 2621440,\n        \"mime_type\": \"application/pdf\",\n        \"created_at\": \"2024-01-15T12:00:00.000Z\",\n        \"updated_at\": \"2024-01-15T12:00:00.000Z\"\n      },\n      {\n        \"_id\": \"765432109876543210987655\",\n        \"file_name\": \"presentation.pptx\",\n        \"folder_id\": \"654321098765432109876543\",\n        \"file_type\": \"pptx\",\n        \"file_size\": \"5.2MB\",\n        \"created_at\": \"2024-01-15T13:00:00.000Z\"\n      }\n    ],\n    \"pagination\": {\n      \"current_page\": 1,\n      \"total_pages\": 1,\n      \"total_count\": 2,\n      \"per_page\": 10\n    }\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "Get Files By Type",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "moduledata",
+                "value": "{{moduledata}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v2/drive/files/by-type?file_type=pdf",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v2", "drive", "files", "by-type"],
+              "query": [
+                {
+                  "key": "file_type",
+                  "value": "pdf",
+                  "description": "Required file type to filter"
+                }
+              ]
+            }
+          },
+          "response": [
+            {
+              "name": "Success Response",
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/v2/drive-files/by-type?file_type=pdf",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "v2", "drive-files", "by-type"],
+                  "query": [
+                    {
+                      "key": "file_type",
+                      "value": "pdf"
+                    }
+                  ]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "header": [],
+              "body": "{\n  \"success\": true,\n  \"message\": \"files_by_type_fetched\",\n  \"data\": {\n    \"files\": [\n      {\n        \"_id\": \"765432109876543210987654\",\n        \"file_name\": \"project_report.pdf\",\n        \"folder_id\": \"654321098765432109876543\",\n        \"file_type\": \"pdf\",\n        \"file_size\": \"2.5MB\",\n        \"mime_type\": \"application/pdf\",\n        \"created_at\": \"2024-01-15T12:00:00.000Z\"\n      },\n      {\n        \"_id\": \"765432109876543210987656\",\n        \"file_name\": \"manual.pdf\",\n        \"folder_id\": \"654321098765432109876544\",\n        \"file_type\": \"pdf\",\n        \"file_size\": \"1.8MB\",\n        \"mime_type\": \"application/pdf\",\n        \"created_at\": \"2024-01-15T14:00:00.000Z\"\n      }\n    ],\n    \"pagination\": {\n      \"current_page\": 1,\n      \"total_pages\": 1,\n      \"total_count\": 2\n    }\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "Get Specific File",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "moduledata",
+                "value": "{{moduledata}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v2/drive/files/765432109876543210987654",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v2", "drive", "files", "765432109876543210987654"]
+            }
+          },
+          "response": [
+            {
+              "name": "Success Response",
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/v2/drive-files/765432109876543210987654",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "v2", "drive-files", "765432109876543210987654"]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "header": [],
+              "body": "{\n  \"success\": true,\n  \"message\": \"file_fetched\",\n  \"data\": {\n    \"_id\": \"765432109876543210987654\",\n    \"file_name\": \"project_report.pdf\",\n    \"folder_id\": \"654321098765432109876543\",\n    \"file_path\": \"/documents/reports/\",\n    \"description\": \"Monthly project report\",\n    \"file_type\": \"pdf\",\n    \"file_size\": \"2.5MB\",\n    \"file_size_bytes\": 2621440,\n    \"mime_type\": \"application/pdf\",\n    \"project_id\": \"123456789012345678901234\",\n    \"user_id\": \"987654321098765432109876\",\n    \"created_at\": \"2024-01-15T12:00:00.000Z\",\n    \"updated_at\": \"2024-01-15T12:00:00.000Z\",\n    \"attachment\": {\n      \"url\": \"https://s3.amazonaws.com/bucket/file.pdf\",\n      \"bucket\": \"zillit-drive-files\",\n      \"key\": \"files/project_report_123.pdf\",\n      \"cdn_url\": \"https://cdn.zillit.com/files/project_report_123.pdf\",\n      \"original_name\": \"project_report.pdf\",\n      \"size\": 2621440,\n      \"mime_type\": \"application/pdf\",\n      \"encoding\": \"utf-8\"\n    }\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "Update File",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "moduledata",
+                "value": "{{moduledata}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"file_id\": \"765432109876543210987654\",            // string (ObjectId), optional - File ID for validation\n  \"file_name\": \"updated_project_report.pdf\",       // string, optional - Updated file name\n  \"folder_id\": \"654321098765432109876543\",          // string (ObjectId) or null, optional - New folder ID\n  \"file_path\": \"/documents/updated/\",               // string, optional - Updated file path\n  \"description\": \"Updated monthly project report with latest data\", // string, optional - Updated description\n  \"file_type\": \"pdf\",                               // string, optional - Updated file type\n  \"file_extension\": \"pdf\",                          // string, optional - Updated file extension\n  \"file_size\": \"3.2MB\",                             // string, optional - Updated file size\n  \"file_size_bytes\": 3355443,                       // number, optional - Updated file size in bytes\n  \"mime_type\": \"application/pdf\",                   // string, optional - Updated MIME type\n  \"attachment\": {                                   // object, optional - Updated attachment details (based on attachmentSchema)\n    \"media\": \"https://s3.amazonaws.com/bucket/updated_file.pdf\",  // string, optional - Updated file URL/media path\n    \"name\": \"updated_project_report.pdf\",                       // string, optional - Updated attachment name\n    \"thumbnail\": \"https://cdn.zillit.com/thumbs/updated_thumb.jpg\", // string, optional - Updated thumbnail URL\n    \"content_type\": \"document\",                                  // string, optional - Updated content type\n    \"content_subtype\": \"pdf\",                                   // string, optional - Updated exact extension\n    \"caption\": \"Updated monthly project report\",                // string, optional - Updated caption\n    \"duration\": 0,                                              // number, optional - Duration for media files\n    \"height\": 0,                                                // number, optional - Height for images/videos\n    \"width\": 0,                                                 // number, optional - Width for images/videos\n    \"bucket\": \"zillit-drive-files\",                             // string, optional - Updated bucket name\n    \"region\": \"us-east-1\",                                      // string, optional - Updated S3 region\n    \"created\": 1705420800000,                                   // number, optional - Updated creation timestamp\n    \"file_size\": \"3.2MB\",                                       // string, optional - Updated human readable size\n    \"content_id\": \"drive_file_456\"                              // string, optional - Updated content identifier\n  }\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v2/drive/files/765432109876543210987654",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v2", "drive", "files", "765432109876543210987654"]
+            }
+          },
+          "response": [
+            {
+              "name": "Success Response",
+              "originalRequest": {
+                "method": "PUT",
+                "header": [],
+                "body": {
+                  "mode": "raw",
+                  "raw": ""
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/api/v2/drive-files/765432109876543210987654",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "v2", "drive-files", "765432109876543210987654"]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "header": [],
+              "body": "{\n  \"success\": true,\n  \"message\": \"file_updated\",\n  \"data\": {\n    \"_id\": \"765432109876543210987654\",\n    \"file_name\": \"updated_project_report.pdf\",\n    \"folder_id\": \"654321098765432109876543\",\n    \"file_path\": \"/documents/reports/\",\n    \"description\": \"Updated monthly project report with latest data\",\n    \"file_type\": \"pdf\",\n    \"file_size\": \"2.5MB\",\n    \"file_size_bytes\": 2621440,\n    \"mime_type\": \"application/pdf\",\n    \"project_id\": \"123456789012345678901234\",\n    \"user_id\": \"987654321098765432109876\",\n    \"created_at\": \"2024-01-15T12:00:00.000Z\",\n    \"updated_at\": \"2024-01-15T16:00:00.000Z\"\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "Move File",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "moduledata",
+                "value": "{{moduledata}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"target_folder_id\": \"654321098765432109876544\"    // string (ObjectId) or null, optional - Target folder ID to move file to\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v2/drive/files/765432109876543210987654/move",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v2", "drive", "files", "765432109876543210987654", "move"]
+            }
+          },
+          "response": [
+            {
+              "name": "Success Response",
+              "originalRequest": {
+                "method": "PUT",
+                "header": [],
+                "body": {
+                  "mode": "raw",
+                  "raw": ""
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/api/v2/drive-files/765432109876543210987654/move",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "v2", "drive-files", "765432109876543210987654", "move"]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "header": [],
+              "body": "{\n  \"success\": true,\n  \"message\": \"file_moved\",\n  \"data\": {\n    \"_id\": \"765432109876543210987654\",\n    \"file_name\": \"updated_project_report.pdf\",\n    \"folder_id\": \"654321098765432109876544\",\n    \"previous_folder_id\": \"654321098765432109876543\",\n    \"file_path\": \"/documents/reports/\",\n    \"description\": \"Updated monthly project report with latest data\",\n    \"file_type\": \"pdf\",\n    \"updated_at\": \"2024-01-15T17:00:00.000Z\",\n    \"moved_at\": \"2024-01-15T17:00:00.000Z\"\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "Delete File",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "moduledata",
+                "value": "{{moduledata}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v2/drive/files/765432109876543210987654",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v2", "drive", "files", "765432109876543210987654"]
+            }
+          },
+          "response": [
+            {
+              "name": "Success Response",
+              "originalRequest": {
+                "method": "DELETE",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/v2/drive-files/765432109876543210987654",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "v2", "drive-files", "765432109876543210987654"]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "header": [],
+              "body": "{\n  \"success\": true,\n  \"message\": \"file_deleted\",\n  \"data\": {\n    \"deleted_file_id\": \"765432109876543210987654\",\n    \"deleted_at\": \"2024-01-15T18:00:00.000Z\"\n  }\n}"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
