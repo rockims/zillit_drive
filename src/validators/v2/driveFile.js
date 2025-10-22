@@ -15,6 +15,16 @@ const attachmentSchema = Joi.object({
   created: Joi.number().optional(),
   file_size: Joi.string().allow('').optional(),
   content_id: Joi.string().allow('').optional(),
+  // Additional fields from your request
+  description: Joi.string().allow('').optional(),
+  original_file_name: Joi.string().allow('').optional(),
+  uploaded_to_aws: Joi.string().allow('').optional(),
+  message_group_id: Joi.number().optional(),
+  file_extension: Joi.string().allow('').optional(),
+  media_type: Joi.string().allow('').optional(),
+  uploaded: Joi.boolean().optional(),
+  type: Joi.string().allow('').optional(),
+  size: Joi.alternatives().try(Joi.string(), Joi.number()).optional(),
 });
 
 const createFile = Joi.object({
@@ -65,6 +75,12 @@ const createFile = Joi.object({
 
   attachments: Joi.array().items(attachmentSchema).optional().error((err) => {
     err[0].message = 'attachments_validation';
+    return err;
+  }),
+
+  // Support singular 'attachment' for backward compatibility
+  attachment: attachmentSchema.optional().error((err) => {
+    err[0].message = 'attachment_validation';
     return err;
   }),
 });
