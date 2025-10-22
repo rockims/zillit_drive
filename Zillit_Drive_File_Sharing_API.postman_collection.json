@@ -1,0 +1,688 @@
+{
+  "info": {
+    "name": "Zillit Drive File Sharing API",
+    "description": "Complete API collection for file sharing functionality in Zillit Drive",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "_postman_id": "file-sharing-api-collection"
+  },
+  "item": [
+    {
+      "name": "Health & Basic Operations",
+      "item": [
+        {
+          "name": "Health Check",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/",
+              "host": ["{{baseUrl}}"],
+              "path": [""]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get File Details",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "moduledata",
+                "value": "{{moduleData}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v2/drive/files/{{fileId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v2", "drive", "files", "{{fileId}}"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "List All Files",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "moduledata",
+                "value": "{{moduleData}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v2/drive/files",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v2", "drive", "files"]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "File Sharing Operations",
+      "item": [
+        {
+          "name": "Create Share Link",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "// Extract share token from response for use in other requests",
+                  "if (pm.response.code === 200) {",
+                  "    const response = pm.response.json();",
+                  "    if (response.status === 1 && response.data && response.data.share_token) {",
+                  "        pm.environment.set('shareToken', response.data.share_token);",
+                  "        console.log('Share token saved:', response.data.share_token);",
+                  "    }",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "moduledata",
+                "value": "{{moduleData}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"permissions\": \"read\",\n  \"expires_at\": \"2026-12-31T23:59:59Z\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v2/drive/files/{{fileId}}/share",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v2", "drive", "files", "{{fileId}}", "share"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Create Share Link (No Expiration)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "// Extract share token from response",
+                  "if (pm.response.code === 200) {",
+                  "    const response = pm.response.json();",
+                  "    if (response.status === 1 && response.data && response.data.share_token) {",
+                  "        pm.environment.set('permanentShareToken', response.data.share_token);",
+                  "        console.log('Permanent share token saved:', response.data.share_token);",
+                  "    }",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "moduledata",
+                "value": "{{moduleData}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"permissions\": \"read\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v2/drive/files/{{fileId}}/share",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v2", "drive", "files", "{{fileId}}", "share"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Create Share Link (Download Permission)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "moduledata",
+                "value": "{{moduleData}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"permissions\": \"download\",\n  \"expires_at\": \"2025-12-31T23:59:59Z\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v2/drive/files/{{fileId}}/share",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v2", "drive", "files", "{{fileId}}", "share"]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Public Access (No Auth Required)",
+      "item": [
+        {
+          "name": "Access Shared File (No Auth)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "// Extract signed URLs from response",
+                  "if (pm.response.code === 200) {",
+                  "    const response = pm.response.json();",
+                  "    if (response.status === 1 && response.data) {",
+                  "        if (response.data.signed_url) {",
+                  "            pm.environment.set('signedUrl', response.data.signed_url);",
+                  "            console.log('Signed URL saved for direct file access');",
+                  "        }",
+                  "        if (response.data.download_url) {",
+                  "            pm.environment.set('downloadUrl', response.data.download_url);",
+                  "            console.log('Download URL saved for file download');",
+                  "        }",
+                  "    }",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v2/drive/public/{{shareToken}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v2", "drive", "public", "{{shareToken}}"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Access Shared File (With ModuleData)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "moduledata",
+                "value": "{{moduleData}}",
+                "type": "text",
+                "description": "Optional - public access works without this too"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v2/drive/public/{{shareToken}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v2", "drive", "public", "{{shareToken}}"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Access Permanent Share (No Auth)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v2/drive/public/{{permanentShareToken}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v2", "drive", "public", "{{permanentShareToken}}"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Access Invalid/Expired Share",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v2/drive/public/invalid-token-123",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v2", "drive", "public", "invalid-token-123"]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Direct File Access (S3 Signed URLs)",
+      "item": [
+        {
+          "name": "Access File via Signed URL",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{signedUrl}}",
+              "host": ["{{signedUrl}}"]
+            },
+            "description": "Direct access to the private S3 file using the signed URL obtained from public share endpoint"
+          },
+          "response": []
+        },
+        {
+          "name": "Download File via Download URL",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{downloadUrl}}",
+              "host": ["{{downloadUrl}}"]
+            },
+            "description": "Direct download of the private S3 file using the download URL (available for shares with download permission)"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "File Sharing with Download Permission",
+      "item": [
+        {
+          "name": "Create Download Share",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "// Extract download share token",
+                  "if (pm.response.code === 200) {",
+                  "    const response = pm.response.json();",
+                  "    if (response.status === 1 && response.data && response.data.share_token) {",
+                  "        pm.environment.set('downloadShareToken', response.data.share_token);",
+                  "        console.log('Download share token saved:', response.data.share_token);",
+                  "    }",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "moduledata",
+                "value": "{{moduleData}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"permissions\": \"download\",\n  \"expires_at\": \"2026-12-31T23:59:59Z\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v2/drive/files/{{fileId}}/share",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v2", "drive", "files", "{{fileId}}", "share"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Access Download Share (Get URLs)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "// Extract both signed and download URLs",
+                  "if (pm.response.code === 200) {",
+                  "    const response = pm.response.json();",
+                  "    if (response.status === 1 && response.data) {",
+                  "        if (response.data.signed_url) {",
+                  "            pm.environment.set('downloadSignedUrl', response.data.signed_url);",
+                  "            console.log('Download signed URL saved');",
+                  "        }",
+                  "        if (response.data.download_url) {",
+                  "            pm.environment.set('downloadFileUrl', response.data.download_url);",
+                  "            console.log('Download file URL saved');",
+                  "        }",
+                  "    }",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v2/drive/public/{{downloadShareToken}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v2", "drive", "public", "{{downloadShareToken}}"]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Share Management",
+      "item": [
+        {
+          "name": "List File Shares",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "moduledata",
+                "value": "{{moduleData}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v2/drive/files/{{fileId}}/shares",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v2", "drive", "files", "{{fileId}}", "shares"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Revoke All File Shares",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "moduledata",
+                "value": "{{moduleData}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v2/drive/files/{{fileId}}/share",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v2", "drive", "files", "{{fileId}}", "share"]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Complete Workflow Tests",
+      "item": [
+        {
+          "name": "Full Share Workflow Test",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "// This request will run a complete workflow test",
+                  "console.log('Starting full workflow test...');"
+                ],
+                "type": "text/javascript"
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "// Test the complete workflow",
+                  "pm.test('Health Check Passes', function () {",
+                  "    // This would be part of a workflow where you run multiple requests",
+                  "    // Use Postman's Collection Runner for automated testing",
+                  "});",
+                  "",
+                  "// You can add more comprehensive tests here",
+                  "pm.test('Response is successful', function () {",
+                  "    pm.expect(pm.response.code).to.be.oneOf([200, 201]);",
+                  "});",
+                  "",
+                  "pm.test('Response contains expected data structure', function () {",
+                  "    const response = pm.response.json();",
+                  "    pm.expect(response).to.have.property('status');",
+                  "    pm.expect(response).to.have.property('message');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/",
+              "host": ["{{baseUrl}}"],
+              "path": [""]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Error Scenarios",
+      "item": [
+        {
+          "name": "Share Non-existent File",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "moduledata",
+                "value": "{{moduleData}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"permissions\": \"read\",\n  \"expires_at\": \"2026-12-31T23:59:59Z\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v2/drive/files/000000000000000000000000/share",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v2", "drive", "files", "000000000000000000000000", "share"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Share Without Auth",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"permissions\": \"read\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v2/drive/files/{{fileId}}/share",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v2", "drive", "files", "{{fileId}}", "share"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Invalid Share Permissions",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "moduledata",
+                "value": "{{moduleData}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"permissions\": \"invalid_permission\",\n  \"expires_at\": \"2026-12-31T23:59:59Z\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v2/drive/files/{{fileId}}/share",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v2", "drive", "files", "{{fileId}}", "share"]
+            }
+          },
+          "response": []
+        }
+      ]
+    }
+  ],
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// Global pre-request script",
+          "console.log('Request to:', pm.request.url);"
+        ]
+      }
+    },
+    {
+      "listen": "test",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// Global test script",
+          "console.log('Response status:', pm.response.code);"
+        ]
+      }
+    }
+  ],
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8105",
+      "type": "string"
+    },
+    {
+      "key": "moduleData",
+      "value": "9bf45a428070559f3376f051dd8877f1cdc26fed18a17e5d9f05337339f17aaa2dcb4c3474635573f852906b03eeab055b53675d1c163c04a58173d85a4fba3bc24b2494c14e2f943e44738ecfe9dab8818d7fe7a9ac6ecbd9bffa85e295cd4f8f288371124b3e34ff5989b589685eb975bc1eb34020fb1924b72e64c1fd4d73f9e439c1ab7104103a2f2094f8ff6e40349954d10bee1fde2f9df25fd019413b",
+      "type": "string"
+    },
+    {
+      "key": "fileId",
+      "value": "68f0cb8bdcbea8318fcaafb6",
+      "type": "string"
+    },
+    {
+      "key": "shareToken",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "permanentShareToken",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "signedUrl",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "downloadUrl",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "downloadShareToken",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "downloadSignedUrl",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "downloadFileUrl",
+      "value": "",
+      "type": "string"
+    }
+  ]
+}

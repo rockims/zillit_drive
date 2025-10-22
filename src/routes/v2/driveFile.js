@@ -31,4 +31,9 @@ router.put('/:fileId/move', objectIdValidator(['fileId']), moduledata, checkAcce
 // Delete file
 router.delete('/:fileId', objectIdValidator(['fileId']), moduledata, checkAccess, DriveFile.deleteFile);
 
+// File sharing endpoints
+router.post('/:fileId/share', objectIdValidator(['fileId']), moduledata, checkAccess, DriveFile.shareFile);
+router.get('/:fileId/shares', objectIdValidator(['fileId']), moduledata, checkAccess, DriveFile.getFileShares);
+router.delete('/:fileId/share', objectIdValidator(['fileId']), moduledata, checkAccess, DriveFile.revokeFileShare);
+
 export default router;

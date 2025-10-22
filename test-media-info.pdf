@@ -1,0 +1,76 @@
+%PDF-1.4
+1 0 obj
+<<
+/Type /Catalog
+/Pages 2 0 R
+>>
+endobj
+
+2 0 obj
+<<
+/Type /Pages
+/Kids [3 0 R]
+/Count 1
+>>
+endobj
+
+3 0 obj
+<<
+/Type /Page
+/Parent 2 0 R
+/MediaBox [0 0 612 792]
+/Contents 4 0 R
+>>
+endobj
+
+4 0 obj
+<<
+/Length 400
+>>
+stream
+BT
+/F1 14 Tf
+50 750 Td
+(MEDIA FILE INFORMATION) Tj
+0 -30 Td
+/F1 12 Tf
+(File Name: test-video-with-s3.mp4) Tj
+0 -20 Td
+(File Type: media) Tj
+0 -20 Td
+(MIME Type: video/mp4) Tj
+0 -20 Td
+(File Size: 2.5 MB) Tj
+0 -20 Td
+(S3 Bucket: zillit-drive-test-bucket) Tj
+0 -20 Td
+(S3 Path: files/test-videos/sample-video.mp4) Tj
+0 -20 Td
+(Duration: 45 seconds) Tj
+0 -20 Td
+(Dimensions: 1920x1080) Tj
+0 -40 Td
+(NOTE: This is a preview document.) Tj
+0 -20 Td
+(The actual media file is stored in S3.) Tj
+0 -20 Td
+(Contact support if you need direct access.) Tj
+ET
+endstream
+endobj
+
+xref
+0 5
+0000000000 65535 f 
+0000000010 00000 n 
+0000000060 00000 n 
+0000000120 00000 n 
+0000000200 00000 n 
+trailer
+<<
+/Size 5
+/Root 1 0 R
+>>
+startxref
+650
+%%EOF

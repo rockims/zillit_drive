@@ -5,6 +5,8 @@ import NotificationService from 'zillit-libs/services-v2/notification';
 import NotificationRepository from 'zillit-libs/repositories-v2/notification';
 import { rights } from 'zillit-libs/services-v2/permissions';
 import socketClient from '../../config/socketClient.js';
+import FileShareRepository from 'zillit-libs/repositories-v2/file-share';
+import S3Service from 'zillit-libs/services-v2/s3-bucket';
 
 const {
   sections, tools, units,
@@ -400,6 +402,259 @@ const getFilesByType = async ({ project, query }) => {
   return files;
 };
 
+const shareFile = async ({ user, project, params, body }) => {
+  const { fileId } = params;
+  const { permissions = 'read', expires_at } = body;
+
+  // Check if file exists
+  const filters = {
+    _id: fileId,
+    project_id: project._id,
+    deleted_on: 0,
+  };
+
+  const file = await DriveFileRepository.getFile({ filters });
+  if (!file) {
+    throw new BadRequest('file_not_found');
+  }
+
+  // Generate unique share token
+  const crypto = await import('crypto');
+  const shareToken = crypto.randomBytes(32).toString('hex');
+
+  // Prepare share data (expires_at should be epoch timestamp)
+  const shareData = {
+    file_id: fileId,
+    project_id: project._id,
+    share_token: shareToken,
+    permissions: permissions, // 'read', 'write', 'download'
+    expires_at: expires_at || null, // epoch timestamp or null
+    created_by: user._id,
+    is_active: true,
+  };
+
+  // Save share data using FileShareRepository
+  console.log('🔄 About to create share with data:', shareData);
+  try {
+    const createdShare = await FileShareRepository.createShare(shareData);
+    console.log('✅ Created share:', createdShare);
+  } catch (error) {
+    console.log('❌ Failed to create share:', error);
+    throw error;
+  }
+
+  return {
+    share_token: shareToken,
+    share_url: `${process.env.BASE_URL || 'http://localhost:8105'}/api/v2/drive/public/${shareToken}`,
+    permissions: permissions,
+    expires_at: expires_at,
+    created_at: new Date().toISOString(),
+  };
+};
+
+const getFileShares = async ({ user, project, params }) => {
+  const { fileId } = params;
+
+  // Check if file exists
+  const filters = {
+    _id: fileId,
+    project_id: project._id,
+    deleted_on: 0,
+  };
+
+  const file = await DriveFileRepository.getFile({ filters });
+  if (!file) {
+    throw new BadRequest('file_not_found');
+  }
+
+  // Get active shares for the file from FileShareRepository
+  const activeShares = await FileShareRepository.findByFileId(fileId);
+
+  return activeShares.map(share => ({
+    share_token: share.share_token,
+    share_url: `${process.env.BASE_URL || 'http://localhost:8105'}/api/v2/drive/public/${share.share_token}`,
+    permissions: share.permissions,
+    expires_at: share.expires_at,
+    created_at: share.created_on,
+  }));
+};
+
+const revokeFileShare = async ({ user, project, params }) => {
+  const { fileId } = params;
+
+  // Check if file exists
+  const filters = {
+    _id: fileId,
+    project_id: project._id,
+    deleted_on: 0,
+  };
+
+  const file = await DriveFileRepository.getFile({ filters });
+  if (!file) {
+    throw new BadRequest('file_not_found');
+  }
+
+  // Deactivate all shares for this file using FileShareRepository
+  await FileShareRepository.revokeByFileId(fileId);
+
+  return { message: 'All shares revoked successfully' };
+};
+
+const getPublicFile = async ({ params }) => {
+  const { token } = params;
+
+  console.log('🔍 Looking for token:', token);
+
+  // Find share by token using FileShareRepository
+  let share;
+  try {
+    share = await FileShareRepository.findByToken(token);
+    console.log('🎯 Found share:', share);
+    
+    if (!share) {
+      console.log('❌ Share not found - checking all shares...');
+      // Debug: List all shares to see what's in the database
+      const allShares = await FileShareRepository.findDocuments({ filters: {} });
+      console.log('📋 All shares in database:', allShares);
+      throw new BadRequest('share_not_found_or_expired');
+    }
+  } catch (error) {
+    console.log('❌ Error finding share:', error);
+    throw error;
+  }
+
+  // Get file details
+  const filters = {
+    _id: share.file_id,
+    project_id: share.project_id,
+    deleted_on: 0,
+  };
+
+  const file = await DriveFileRepository.getFile({ filters });
+  if (!file) {
+    throw new BadRequest('file_not_found');
+  }
+
+  // Generate signed URL for private file access
+  let signed_url = null;
+  let download_url = null;
+  let file_access_method = 'metadata_only'; // Track how file can be accessed
+
+  try {
+    // Extract S3 information from file attachments
+    if (file.attachments && file.attachments.length > 0) {
+      const attachment = file.attachments[0]; // Use the first attachment
+      
+      // Check if we have real S3 data (not placeholder/sample data)
+      const hasValidS3Data = attachment.bucket && 
+                            attachment.region && 
+                            attachment.media && 
+                            !attachment.media.includes('/bucket/') && // Exclude placeholder URLs
+                            attachment.bucket !== 'sample-bucket' &&
+                            attachment.bucket !== 'test-bucket';
+
+      if (hasValidS3Data) {
+        const s3Service = new S3Service();
+        
+        // Extract S3 key from media URL or use the media field directly
+        let s3Key = attachment.media;
+        
+        // If media is a full S3 URL, extract the key
+        if (s3Key && s3Key.startsWith('https://s3.amazonaws.com/')) {
+          // Extract key from URL like: https://s3.amazonaws.com/bucket/key
+          const urlParts = s3Key.split('/');
+          s3Key = urlParts.slice(4).join('/'); // Everything after bucket name
+        } else if (s3Key && s3Key.startsWith('https://')) {
+          // Handle other S3 URL formats
+          const url = new URL(s3Key);
+          s3Key = url.pathname.substring(1); // Remove leading slash
+        }
+
+        if (s3Key && s3Key !== 'file.pdf') { // Exclude placeholder keys
+          // First check if the file actually exists in S3
+          const s3FileExists = await s3Service.fileExists({
+            media: s3Key,
+            bucket: attachment.bucket,
+            region: attachment.region,
+          });
+
+          if (s3FileExists) {
+            // Generate signed URL (expires in 1 hour by default)
+            const expirationTime = share.expires_at && share.expires_at > 0 ? 
+              Math.min(3600, Math.floor((share.expires_at - Date.now()) / 1000)) : 
+              3600;
+            
+            if (expirationTime > 0) {
+              signed_url = await s3Service.getSignedUrl({
+                media: s3Key,
+                bucket: attachment.bucket,
+                region: attachment.region,
+                expiresIn: expirationTime,
+              });
+
+              // For download permission, create a download URL
+              if (share.permissions === 'download') {
+                download_url = signed_url;
+              }
+
+              file_access_method = 's3_signed_url';
+            }
+          } else {
+            console.log(`⚠️  S3 file does not exist: ${attachment.bucket}/${s3Key}`);
+            file_access_method = 'file_not_found_in_s3';
+          }
+        } else {
+          console.log('⚠️  Invalid S3 key detected (placeholder data)');
+          file_access_method = 'placeholder_data';
+        }
+      } else {
+        console.log('⚠️  No valid S3 data found in attachment');
+        file_access_method = 'no_s3_data';
+      }
+      
+      // If no S3 access but we have a direct URL, use that
+      if (!signed_url && attachment.media && attachment.media.startsWith('http')) {
+        file_access_method = 'direct_url';
+        // For demo purposes, provide the direct URL (in production, you might want to proxy this)
+        signed_url = attachment.media;
+        if (share.permissions === 'download') {
+          download_url = attachment.media;
+        }
+      }
+    }
+  } catch (error) {
+    console.error('Error generating signed URL:', error);
+    file_access_method = 'error_generating_signed_url';
+  }
+
+  // Generate content streaming URL (always available)
+  const baseUrl = process.env.BASE_URL || 'http://localhost:8105';
+  const content_stream_url = `${baseUrl}/api/v2/drive/public/${token}/content`;
+
+  // Return file data (excluding sensitive information)
+  return {
+    _id: file._id,
+    file_name: file.file_name,
+    file_type: file.file_type,
+    file_extension: file.file_extension,
+    file_size: file.file_size,
+    file_url: file.file_url,
+    permissions: share.permissions,
+    shared_at: share.created_on,
+    expires_at: share.expires_at,
+    signed_url: signed_url, // Direct S3 access URL (if available)
+    download_url: download_url, // Direct S3 download URL (if available)
+    content_stream_url: content_stream_url, // Server-proxied file content (always works)
+    file_access_method: file_access_method, // How the file can be accessed
+    access_info: {
+      has_s3_access: signed_url !== null && !signed_url.includes('/bucket/'),
+      has_direct_url: file.attachments?.[0]?.media?.startsWith('http') || false,
+      has_content_stream: true, // Always available through our server
+      attachment_count: file.attachments?.length || 0,
+    }
+  };
+};
+
 export default {
   createFile,
   getFiles,
@@ -408,4 +663,8 @@ export default {
   deleteFile,
   moveFile,
   getFilesByType,
+  shareFile,
+  getFileShares,
+  revokeFileShare,
+  getPublicFile,
 };

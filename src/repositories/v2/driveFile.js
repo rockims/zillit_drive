@@ -8,8 +8,16 @@ const getFiles = ({ filters, sort = { created_on: -1 } }) => DriveFile.find(filt
 
 const updateFile = ({ filters, data }) => DriveFile.updateOne({ ...filters }, { $set: { ...data } });
 
-const updateFileDocument = ({ filters, data }) =>
-  DriveFile.findOneAndUpdate({ ...filters }, { $set: { ...data } }, { new: true });
+const updateFileDocument = ({ filters, data }) => {
+  // Handle different MongoDB operations
+  if (data.$push || data.$set || data.$unset || data.$pull) {
+    // Data already contains MongoDB operators
+    return DriveFile.findOneAndUpdate({ ...filters }, data, { new: true });
+  } else {
+    // Wrap in $set for backwards compatibility
+    return DriveFile.findOneAndUpdate({ ...filters }, { $set: { ...data } }, { new: true });
+  }
+};
 
 const updateFiles = ({ filters, data }) => DriveFile.updateMany({ ...filters }, { $set: { ...data } });
 

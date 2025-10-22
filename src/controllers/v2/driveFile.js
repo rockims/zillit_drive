@@ -107,6 +107,56 @@ class DriveFile {
       return ApiResponse.handleError(res, error);
     }
   }
+
+  async shareFile(req, res) {
+    const {
+      user, project, params, body
+    } = req;
+    try {
+      const shareData = await DriveFileService.shareFile({ user, project, params, body });
+      return ApiResponse.handleResponse(res, { message: 'file_shared', data: shareData });
+    } catch (error) {
+      console.log('[file_sharing_failed]:');
+      return ApiResponse.handleError(res, error);
+    }
+  }
+
+  async getFileShares(req, res) {
+    const {
+      user, project, params
+    } = req;
+    try {
+      const shares = await DriveFileService.getFileShares({ user, project, params });
+      return ApiResponse.handleResponse(res, { message: 'file_shares_fetched', data: shares });
+    } catch (error) {
+      console.log('[file_shares_fetch_failed]:');
+      return ApiResponse.handleError(res, error);
+    }
+  }
+
+  async revokeFileShare(req, res) {
+    const {
+      user, project, params
+    } = req;
+    try {
+      const result = await DriveFileService.revokeFileShare({ user, project, params });
+      return ApiResponse.handleResponse(res, { message: 'file_share_revoked', data: result });
+    } catch (error) {
+      console.log('[file_share_revoke_failed]:');
+      return ApiResponse.handleError(res, error);
+    }
+  }
+
+  async getPublicFile(req, res) {
+    const { params } = req;
+    try {
+      const fileData = await DriveFileService.getPublicFile({ params });
+      return ApiResponse.handleResponse(res, { message: 'public_file_accessed', data: fileData });
+    } catch (error) {
+      console.log('[public_file_access_failed]:');
+      return ApiResponse.handleError(res, error);
+    }
+  }
 }
 
 export default new DriveFile();
