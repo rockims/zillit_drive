@@ -54,6 +54,16 @@ const createFile = async ({ user, project, device, body, query }) => {
   // Extract file extension from file name
   const fileExtension = body.file_name.split('.').pop().toLowerCase();
 
+  // Handle attachment conversion: singular 'attachment' to plural 'attachments' array
+  let attachments = [];
+  if (body.attachments && Array.isArray(body.attachments)) {
+    // If attachments array is provided, use it
+    attachments = body.attachments;
+  } else if (body.attachment && typeof body.attachment === 'object') {
+    // If single attachment object is provided, convert to array
+    attachments = [body.attachment];
+  }
+
   const data = {
     ...body,
     project_id: project._id,
@@ -61,7 +71,11 @@ const createFile = async ({ user, project, device, body, query }) => {
     updated_by: user._id,
     uploaded_by: user._id,
     file_extension: fileExtension,
+    attachments: attachments,
   };
+
+  // Remove the singular 'attachment' field to avoid confusion
+  delete data.attachment;
 
   const file = await DriveFileRepository.createFile({ data });
 
