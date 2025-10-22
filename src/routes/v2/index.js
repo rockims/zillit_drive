@@ -10,6 +10,6 @@ const router = express.Router();
 router.use('/health', health);
 router.use('/drive/folders', driveFolder);
 router.use('/drive/files', driveFile);
-router.use('/drive/public', publicRoutes);
+router.use('/public', publicRoutes);
 
 export default router;

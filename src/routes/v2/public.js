@@ -1,13 +1,14 @@
 import express from 'express';
-import driveFileController from '../../controllers/v2/driveFile.js';
-import fileProxyController from '../../controllers/v2/fileProxy.js';
+import joiValidator from 'zillit-libs/middlewares-v2/joi-validator';
+import DriveFileShare from '../../controllers/v2/driveFileShare.js';
+import driveFileShareValidators from '../../validators/v2/driveFileShare.js';
 
 const router = express.Router();
 
-// Public file access routes (no authentication required)
-router.get('/:token', driveFileController.getPublicFile);
-
-// Public file content streaming (actual file download)
-router.get('/:token/content', fileProxyController.getPublicFileContent);
+// Access shared file (public endpoint - no authentication required)
+router.get('/files/:shareToken', 
+  joiValidator(driveFileShareValidators.accessSharedFile, 'query'), 
+  DriveFileShare.accessSharedFile
+);
 
 export default router;

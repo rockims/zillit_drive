@@ -5,7 +5,9 @@ import joiValidator from 'zillit-libs/middlewares-v2/joi-validator';
 import objectIdValidator from 'zillit-libs/middlewares-v2/objectid-validator';
 
 import DriveFile from '../../controllers/v2/driveFile.js';
+import DriveFileShare from '../../controllers/v2/driveFileShare.js';
 import driveFileValidators from '../../validators/v2/driveFile.js';
+import driveFileShareValidators from '../../validators/v2/driveFileShare.js';
 
 const router = express.Router();
 const moduledata = moduleData(['device_id', 'project_id', 'user_id']);
@@ -31,9 +33,40 @@ router.put('/:fileId/move', objectIdValidator(['fileId']), moduledata, checkAcce
 // Delete file
 router.delete('/:fileId', objectIdValidator(['fileId']), moduledata, checkAccess, DriveFile.deleteFile);
 
-// File sharing endpoints
-router.post('/:fileId/share', objectIdValidator(['fileId']), moduledata, checkAccess, DriveFile.shareFile);
-router.get('/:fileId/shares', objectIdValidator(['fileId']), moduledata, checkAccess, DriveFile.getFileShares);
-router.delete('/:fileId/share', objectIdValidator(['fileId']), moduledata, checkAccess, DriveFile.revokeFileShare);
+// === FILE SHARING ROUTES ===
+
+// Generate shareable link for file
+router.post('/:fileId/share', 
+  objectIdValidator(['fileId']), 
+  moduledata, 
+  checkAccess, 
+  joiValidator(driveFileShareValidators.generateShareLink), 
+  DriveFileShare.generateShareLink
+);
+
+// Get sharing information for file
+router.get('/:fileId/share', 
+  objectIdValidator(['fileId']), 
+  moduledata, 
+  checkAccess, 
+  DriveFileShare.getShareInfo
+);
+
+// Update sharing settings for file
+router.put('/:fileId/share', 
+  objectIdValidator(['fileId']), 
+  moduledata, 
+  checkAccess, 
+  joiValidator(driveFileShareValidators.updateShareSettings), 
+  DriveFileShare.updateShareSettings
+);
+
+// Disable sharing for file
+router.delete('/:fileId/share', 
+  objectIdValidator(['fileId']), 
+  moduledata, 
+  checkAccess, 
+  DriveFileShare.disableSharing
+);
 
 export default router;
