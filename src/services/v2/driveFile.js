@@ -5,6 +5,8 @@ import NotificationService from 'zillit-libs/services-v2/notification';
 import NotificationRepository from 'zillit-libs/repositories-v2/notification';
 import { rights } from 'zillit-libs/services-v2/permissions';
 import socketClient from '../../config/socketClient.js';
+import S3BucketService from 'zillit-libs/services-v2/s3-bucket';
+import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
 
 const {
   sections, tools, units,
@@ -78,6 +80,163 @@ const createFile = async ({ user, project, device, body, query }) => {
   delete data.attachment;
 
   const file = await DriveFileRepository.createFile({ data });
+
+  // Copy attachments from original S3 bucket to public bucket
+  // This follows the same pattern as script-distribution's getScript function
+  if (file.attachments && Array.isArray(file.attachments) && file.attachments.length > 0) {
+    const s3Service = new S3BucketService();
+    const publicBucket = 'zillit-s3-drive-bucket';
+    const publicRegion = 'us-east-1';
+    const updatedAttachments = [];
+    
+    console.log('📋 Processing', file.attachments.length, 'attachment(s) for S3 copy...');
+
+    for (const attachment of file.attachments) {
+      try {
+        // Skip if already in public bucket
+        if (attachment.bucket === publicBucket && attachment.region === publicRegion) {
+          console.log('ℹ️  File already in target bucket, skipping copy...');
+          const publicUrl = `https://${publicBucket}.s3.${publicRegion}.amazonaws.com/${attachment.media}`;
+          updatedAttachments.push({
+            ...attachment,
+            public_url: publicUrl,
+          });
+          continue;
+        }
+        
+        if (attachment.media && attachment.bucket && attachment.region) {
+          console.log('🔄 Starting S3 copy from original bucket...');
+          console.log('   Source bucket:', attachment.bucket);
+          console.log('   Source region:', attachment.region);
+          console.log('   Source key:', attachment.media);
+          console.log('   Target bucket:', publicBucket);
+          console.log('   Target region:', publicRegion);
+          
+          // Get file from original S3 bucket (same as getScript does)
+          console.log('   📥 Fetching file from source bucket...');
+          const fileBuffer = await s3Service.getFile({
+            media: attachment.media,
+            bucket: attachment.bucket,
+            region: attachment.region,
+            buffer: true,
+          });
+
+          console.log('   ✓ File retrieved from source bucket');
+          
+          // Convert stream to buffer if needed
+          let bufferData = fileBuffer;
+          if (fileBuffer && typeof fileBuffer.transformToByteArray === 'function') {
+            bufferData = await fileBuffer.transformToByteArray();
+          } else if (fileBuffer && typeof fileBuffer.on === 'function') {
+            const chunks = [];
+            for await (const chunk of fileBuffer) {
+              chunks.push(chunk);
+            }
+            bufferData = Buffer.concat(chunks);
+          }
+          
+          console.log('   📤 Uploading to public bucket...');
+
+          // Determine content type from mime_type or file extension
+          let contentType = body.mime_type || attachment.content_type || 'application/octet-stream';
+          
+          // Map common extensions to MIME types if not provided
+          if (!contentType || contentType === 'application/octet-stream') {
+            const ext = fileExtension.toLowerCase();
+            const mimeTypes = {
+              'jpg': 'image/jpeg',
+              'jpeg': 'image/jpeg',
+              'png': 'image/png',
+              'gif': 'image/gif',
+              'pdf': 'application/pdf',
+              'doc': 'application/msword',
+              'docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+              'xls': 'application/vnd.ms-excel',
+              'xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+              'ppt': 'application/vnd.ms-powerpoint',
+              'pptx': 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+              'txt': 'text/plain',
+              'mp4': 'video/mp4',
+              'mp3': 'audio/mpeg',
+            };
+            contentType = mimeTypes[ext] || 'application/octet-stream';
+          }
+
+          // Generate S3 key for the file
+          const s3Key = `${project._id}/drive-files/${attachment.name || attachment.media.split('/').pop()}`;
+          
+          // Upload directly to S3 with proper Content-Type and Content-Disposition
+          const s3Client = new S3Client({ region: publicRegion });
+          const uploadCommand = new PutObjectCommand({
+            Bucket: publicBucket,
+            Key: s3Key,
+            Body: bufferData,
+            ContentType: contentType,
+            ContentDisposition: 'inline', // Makes browser display instead of download
+          });
+
+          await s3Client.send(uploadCommand);
+          
+          console.log('   ✓ File uploaded to public bucket with inline disposition');
+          
+          // Generate direct S3 URL
+          const publicUrl = `https://${publicBucket}.s3.${publicRegion}.amazonaws.com/${s3Key}`;
+          
+          console.log('📁 File copied to public bucket successfully!');
+          console.log('   📂 New Key:', s3Key);
+          console.log('   🔗 Public URL:', publicUrl);
+          console.log('   ✅ Content-Type:', contentType);
+          console.log('   ✅ Content-Disposition: inline');
+          console.log('');
+          
+          updatedAttachments.push({
+            ...attachment,
+            media: s3Key,
+            bucket: publicBucket,
+            region: publicRegion,
+            public_url: publicUrl,
+          });
+        } else {
+          console.log('⚠️  Skipping attachment - missing required fields (media, bucket, or region)');
+          updatedAttachments.push(attachment);
+        }
+      } catch (error) {
+        console.error('❌ Error copying attachment to public bucket:', error.message);
+        console.error('   Error details:', {
+          name: error.name,
+          code: error.code,
+          statusCode: error.$metadata?.httpStatusCode,
+          sourceBucket: attachment.bucket,
+          sourceRegion: attachment.region,
+          sourceKey: attachment.media,
+          targetBucket: publicBucket,
+          targetRegion: publicRegion
+        });
+        // Keep original attachment if copy fails
+        updatedAttachments.push(attachment);
+      }
+    }
+
+    // Update file with new attachment information and share_url
+    if (updatedAttachments.length > 0) {
+      console.log('💾 Updating file document with', updatedAttachments.length, 'attachment(s)...');
+      
+      // Get the first attachment's public_url to set as share_url
+      const shareUrl = updatedAttachments[0]?.public_url || '';
+      
+      await DriveFileRepository.updateFileDocument({
+        filters: { _id: file._id },
+        data: { 
+          attachments: updatedAttachments,
+          share_url: shareUrl,
+        },
+      });
+      file.attachments = updatedAttachments;
+      file.share_url = shareUrl;
+      console.log('✅ File document updated with public URLs');
+      console.log('✅ Share URL set:', shareUrl);
+    }
+  }
 
   // Get users with view access to the drive tool
   const usersIds = await _viewingRightsUsers(project);
