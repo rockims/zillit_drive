@@ -3,11 +3,11 @@ import { httpStatusCodes } from 'zillit-libs/config';
 
 class Health {
   constructor() {
-    this.version = 1;
+    this.version = 2;
   }
 
   healthCheck = (_req, resp) => resp.status(httpStatusCodes.OK).send({
-    message: 'V1 Ok',
+    message: 'V2 Ok',
     data: {
       process_id: process.pid,
       uptime: process.uptime(),

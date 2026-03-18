@@ -68,7 +68,40 @@ const updateFolder = Joi.object({
   }),
 });
 
+const updateFolderAccess = Joi.object({
+  entries: Joi.array().items(
+    Joi.object({
+      user_id: Joi.objectId().required().error((err) => {
+        err[0].message = 'folder_access_user_id_validation';
+        return err;
+      }),
+      role: Joi.string().valid('owner', 'editor', 'viewer').required().error((err) => {
+        err[0].message = 'folder_access_role_validation';
+        return err;
+      }),
+    })
+  ).min(1).required().error((err) => {
+    err[0].message = 'folder_access_entries_validation';
+    return err;
+  }),
+  replace_existing: Joi.boolean().optional(),
+});
+
+const inheritFolderAccess = Joi.object({
+  trigger: Joi.boolean().optional(),
+});
+
+const moveFolder = Joi.object({
+  target_folder_id: Joi.objectId().optional().allow(null).error((err) => {
+    err[0].message = 'target_folder_id_validation';
+    return err;
+  }),
+});
+
 export default {
   createFolder,
   updateFolder,
+  updateFolderAccess,
+  inheritFolderAccess,
+  moveFolder,
 };
