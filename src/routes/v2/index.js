@@ -14,6 +14,7 @@ import driveTag from './driveTag.js';
 import driveVersion from './driveVersion.js';
 import driveFileAccess from './driveFileAccess.js';
 import driveEditor from './driveEditor.js';
+import driveWopi from './driveWopi.js';
 
 const router = express.Router();
 
@@ -31,5 +32,6 @@ router.use('/drive/tags', driveTag);
 router.use('/drive/versions', driveVersion);
 router.use('/drive/file-access', driveFileAccess);
 router.use('/drive/editor', driveEditor);
+router.use('/drive/wopi', driveWopi);
 
 export default router;
