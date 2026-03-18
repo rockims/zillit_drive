@@ -35,5 +35,21 @@
   "invalid_file_type": "The uploaded file type is not supported.",
   "insufficient_permissions": "You do not have sufficient permissions to perform this action.",
   "folder_name_exists": "A folder with this name already exists in the specified location.",
-  "file_name_exists": "A file with this name already exists in the specified location."
+  "file_name_exists": "A file with this name already exists in the specified location.",
+  "duplicate_folder_name": "A folder with this name already exists in this location.",
+  "duplicate_file_name": "A file with this name already exists in this location.",
+  "duplicate_file_name_in_target_folder": "A file with this name already exists in the target folder.",
+  "parent_folder_not_found": "Parent folder was not found.",
+  "target_folder_not_found": "Target folder was not found.",
+  "folder_id_required": "Folder id is required.",
+  "file_id_required": "File id is required.",
+  "folder_update_failed": "Folder update failed.",
+  "file_update_failed": "File update failed.",
+  "file_type_required": "File type is required.",
+  "folder_access_fetched": "Folder access list fetched successfully.",
+  "folder_access_updated": "Folder access list updated successfully.",
+  "folder_access_inherited": "Folder access inherited to descendants successfully.",
+  "folder_access_user_id_validation": "Invalid user id in folder access payload.",
+  "folder_access_role_validation": "Invalid role in folder access payload.",
+  "folder_access_entries_validation": "Invalid folder access entries payload."
 }

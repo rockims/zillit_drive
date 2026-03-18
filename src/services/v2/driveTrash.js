@@ -1,0 +1,379 @@
+import DriveFileRepository from '../../repositories/v2/driveFile.js';
+import DriveFolderRepository from '../../repositories/v2/driveFolder.js';
+import DriveFileAccessRepository from '../../repositories/v2/driveFileAccess.js';
+import DriveAccessService from './driveAccess.js';
+import DriveActivityService from './driveActivity.js';
+import BadRequest from 'zillit-libs/errors/BadRequest';
+import Forbidden from 'zillit-libs/errors/Forbidden';
+import socketClient from '../../config/socketClient.js';
+
+/**
+ * DriveTrashService — list, restore, and permanently delete soft-deleted items.
+ *
+ * Soft delete convention:
+ *   active  → deleted_on: 0
+ *   trashed → deleted_on: <timestamp>
+ */
+
+// ───────────────────────────────────────────────────────────
+//  List deleted items (files + folders)
+// ───────────────────────────────────────────────────────────
+
+const listTrash = async ({ user, project, query }) => {
+  const limit = Math.min(parseInt(query?.limit, 10) || 50, 200);
+  const offset = Math.max(parseInt(query?.offset, 10) || 0, 0);
+  const isAdmin = !!user.admin_access;
+
+  const baseFileFilter = {
+    project_id: project._id,
+    deleted_on: { $gt: 0 },
+  };
+  const baseFolderFilter = {
+    project_id: project._id,
+    deleted_on: { $gt: 0 },
+  };
+
+  // Non-admin users only see their own trashed items
+  // (items they created OR items they had explicit file/folder access to)
+  if (!isAdmin) {
+    // Files: user created OR has explicit file access record
+    const userFileAccessRecords = await DriveFileAccessRepository.getAccesses({
+      filters: { project_id: project._id, user_id: user._id },
+    });
+    const accessibleFileIds = userFileAccessRecords.map((a) => a.file_id);
+
+    baseFileFilter.$or = [
+      { created_by: user._id },
+      { _id: { $in: accessibleFileIds } },
+    ];
+
+    // Folders: user created OR has explicit folder access record
+    const DriveFolderAccess = (await import('zillit-libs/mongo-models-v2/DriveFolderAccess')).default;
+    const userFolderAccessRecords = await DriveFolderAccess.find({
+      project_id: project._id,
+      user_id: user._id,
+    }).lean();
+    const accessibleFolderIds = userFolderAccessRecords.map((a) => a.folder_id);
+
+    baseFolderFilter.$or = [
+      { created_by: user._id },
+      { _id: { $in: accessibleFolderIds } },
+    ];
+  }
+
+  // Optional search within trash
+  if (query?.search) {
+    const searchRegex = new RegExp(query.search, 'i');
+    baseFileFilter.file_name = searchRegex;
+    baseFolderFilter.folder_name = searchRegex;
+  }
+
+  const [files, folders, fileCount, folderCount] = await Promise.all([
+    DriveFileRepository.getFiles({
+      filters: baseFileFilter,
+      sort: { deleted_on: -1 },
+      limit,
+      skip: offset,
+    }),
+    DriveFolderRepository.getFolders({
+      filters: baseFolderFilter,
+      sort: { deleted_on: -1 },
+      limit,
+      skip: offset,
+    }),
+    DriveFileRepository.countFiles({ filters: baseFileFilter }),
+    DriveFolderRepository.countFolders({ filters: baseFolderFilter }),
+  ]);
+
+  // Merge and sort by deleted_on desc
+  const items = [
+    ...files.map((f) => ({
+      ...f.toObject(),
+      item_type: 'file',
+      name: f.file_name,
+    })),
+    ...folders.map((f) => ({
+      ...f.toObject(),
+      item_type: 'folder',
+      name: f.folder_name,
+    })),
+  ].sort((a, b) => b.deleted_on - a.deleted_on);
+
+  return {
+    items,
+    total: fileCount + folderCount,
+    limit,
+    offset,
+    _isAdmin: isAdmin,
+  };
+};
+
+// ───────────────────────────────────────────────────────────
+//  Restore a trashed item
+// ───────────────────────────────────────────────────────────
+
+const restoreItem = async ({ user, project, device, params }) => {
+  const { itemId } = params;
+  const { type } = params; // 'file' or 'folder'
+  const isAdmin = !!user.admin_access;
+
+  const now = Date.now();
+  const restoreData = {
+    deleted_on: 0,
+    updated_by: user._id,
+    updated_on: now,
+  };
+
+  if (type === 'folder') {
+    // Restore the folder
+    const folder = await DriveFolderRepository.getFolder({
+      filters: { _id: itemId, project_id: project._id, deleted_on: { $gt: 0 } },
+    });
+
+    if (!folder) {
+      throw new BadRequest('folder_not_found_in_trash');
+    }
+
+    // Only admin or the person who created the folder can restore it
+    if (!isAdmin && String(folder.created_by) !== String(user._id)) {
+      throw new Forbidden('insufficient_permissions_to_restore');
+    }
+
+    // If it has a parent, make sure the parent is not also deleted
+    if (folder.parent_folder_id) {
+      const parent = await DriveFolderRepository.getFolder({
+        filters: { _id: folder.parent_folder_id, project_id: project._id, deleted_on: 0 },
+      });
+      if (!parent) {
+        // Parent is also deleted or doesn't exist — restore to root
+        restoreData.parent_folder_id = null;
+        restoreData.folder_path = `/${folder.folder_name}`;
+      }
+    }
+
+    // Restore the folder itself
+    await DriveFolderRepository.updateFolder({
+      filters: { _id: itemId, project_id: project._id },
+      data: restoreData,
+    });
+
+    // Restore all descendant folders and their files
+    const descendantFolderIds = await DriveAccessService.collectDescendantFolderIds({
+      projectId: project._id,
+      rootFolderId: folder._id,
+      includeRoot: false,
+    });
+
+    if (descendantFolderIds.length > 0) {
+      await Promise.all([
+        DriveFolderRepository.updateFolders({
+          filters: {
+            project_id: project._id,
+            _id: { $in: descendantFolderIds },
+            deleted_on: folder.deleted_on, // Only restore items deleted at the same time
+          },
+          data: restoreData,
+        }),
+        DriveFileRepository.updateFiles({
+          filters: {
+            project_id: project._id,
+            folder_id: { $in: [...descendantFolderIds, folder._id] },
+            deleted_on: folder.deleted_on,
+          },
+          data: restoreData,
+        }),
+      ]);
+    }
+
+    // Also restore files directly in this folder
+    await DriveFileRepository.updateFiles({
+      filters: {
+        project_id: project._id,
+        folder_id: folder._id,
+        deleted_on: folder.deleted_on,
+      },
+      data: restoreData,
+    });
+
+    // Restore access records
+    await DriveAccessService.restoreFolderAccess({
+      projectId: project._id,
+      folderIds: [folder._id, ...descendantFolderIds],
+      data: restoreData,
+    });
+
+    socketClient('__admin_events__', {
+      event: 'drive:folder:restored',
+      room: `${project._id.toString()}_room`,
+      data: { project_id: project._id, folder },
+    });
+
+    // Activity log (fire-and-forget)
+    DriveActivityService.log({
+      projectId: project._id, userId: user._id, action: 'folder_restored',
+      itemId: folder._id, itemType: 'folder', itemName: folder.folder_name,
+    });
+
+    return { message: 'Folder restored successfully', item: folder };
+  }
+
+  // Restore a file
+  const file = await DriveFileRepository.getFile({
+    filters: { _id: itemId, project_id: project._id, deleted_on: { $gt: 0 } },
+  });
+
+  if (!file) {
+    throw new BadRequest('file_not_found_in_trash');
+  }
+
+  // Only admin or the file creator can restore
+  if (!isAdmin && String(file.created_by) !== String(user._id)) {
+    throw new Forbidden('insufficient_permissions_to_restore');
+  }
+
+  // If the file's parent folder is deleted, restore to root
+  if (file.folder_id) {
+    const parentFolder = await DriveFolderRepository.getFolder({
+      filters: { _id: file.folder_id, project_id: project._id, deleted_on: 0 },
+    });
+    if (!parentFolder) {
+      restoreData.folder_id = null;
+    }
+  }
+
+  await DriveFileRepository.updateFile({
+    filters: { _id: itemId, project_id: project._id },
+    data: restoreData,
+  });
+
+  socketClient('__admin_events__', {
+    event: 'drive:file:restored',
+    room: `${project._id.toString()}_room`,
+    data: { project_id: project._id, file },
+  });
+
+  // Activity log (fire-and-forget)
+  DriveActivityService.log({
+    projectId: project._id, userId: user._id, action: 'file_restored',
+    itemId: file._id, itemType: 'file', itemName: file.file_name,
+  });
+
+  return { message: 'File restored successfully', item: file };
+};
+
+// ───────────────────────────────────────────────────────────
+//  Permanently delete a trashed item (admin/owner only)
+// ───────────────────────────────────────────────────────────
+
+const permanentDelete = async ({ user, project, device, params }) => {
+  const { itemId } = params;
+  const { type } = params; // 'file' or 'folder'
+  const isAdmin = !!user.admin_access;
+
+  if (type === 'folder') {
+    const folderCheck = await DriveFolderRepository.getFolder({
+      filters: { _id: itemId, project_id: project._id, deleted_on: { $gt: 0 } },
+    });
+    // Only admin or the creator can permanently delete
+    if (!isAdmin && (!folderCheck || String(folderCheck.created_by) !== String(user._id))) {
+      throw new Forbidden('only_admin_or_creator_can_permanently_delete');
+    }
+    const folder = await DriveFolderRepository.getFolder({
+      filters: { _id: itemId, project_id: project._id, deleted_on: { $gt: 0 } },
+    });
+
+    if (!folder) {
+      throw new BadRequest('folder_not_found_in_trash');
+    }
+
+    // NOTE: Actual S3 object cleanup would be an async job.
+    // For now we hard-delete the DB records.
+
+    // Collect all descendant folder IDs
+    const allFolderIds = await DriveAccessService.collectDescendantFolderIds({
+      projectId: project._id,
+      rootFolderId: folder._id,
+      includeRoot: true,
+    });
+
+    // Remove files in those folders permanently
+    // (Just a note: we keep the DB records removed; S3 cleanup is a separate concern)
+    // For now, hard delete the DB records:
+    const DriveFile = (await import('zillit-libs/mongo-models-v2/DriveFile')).default;
+    const DriveFolder = (await import('zillit-libs/mongo-models-v2/DriveFolder')).default;
+    const DriveFolderAccess = (await import('zillit-libs/mongo-models-v2/DriveFolderAccess')).default;
+
+    await Promise.all([
+      DriveFile.deleteMany({
+        project_id: project._id,
+        folder_id: { $in: allFolderIds },
+      }),
+      DriveFolder.deleteMany({
+        project_id: project._id,
+        _id: { $in: allFolderIds },
+      }),
+      DriveFolderAccess.deleteMany({
+        project_id: project._id,
+        folder_id: { $in: allFolderIds },
+      }),
+    ]);
+
+    return { message: 'Folder permanently deleted' };
+  }
+
+  // Permanent delete a file
+  const file = await DriveFileRepository.getFile({
+    filters: { _id: itemId, project_id: project._id, deleted_on: { $gt: 0 } },
+  });
+
+  if (!file) {
+    throw new BadRequest('file_not_found_in_trash');
+  }
+
+  // Only admin or the file creator can permanently delete
+  if (!isAdmin && String(file.created_by) !== String(user._id)) {
+    throw new Forbidden('only_admin_or_creator_can_permanently_delete');
+  }
+
+  const DriveFile = (await import('zillit-libs/mongo-models-v2/DriveFile')).default;
+  await DriveFile.deleteOne({ _id: itemId, project_id: project._id });
+
+  return { message: 'File permanently deleted' };
+};
+
+// ───────────────────────────────────────────────────────────
+//  Empty entire trash (admin only)
+// ───────────────────────────────────────────────────────────
+
+const emptyTrash = async ({ user, project }) => {
+  // Only admins can empty the entire trash
+  if (!user.admin_access) {
+    throw new Forbidden('only_admins_can_empty_trash');
+  }
+
+  const DriveFile = (await import('zillit-libs/mongo-models-v2/DriveFile')).default;
+  const DriveFolder = (await import('zillit-libs/mongo-models-v2/DriveFolder')).default;
+  const DriveFolderAccess = (await import('zillit-libs/mongo-models-v2/DriveFolderAccess')).default;
+
+  const deletedFolders = await DriveFolderRepository.getFolders({
+    filters: { project_id: project._id, deleted_on: { $gt: 0 } },
+  });
+  const deletedFolderIds = deletedFolders.map((f) => f._id);
+
+  await Promise.all([
+    DriveFile.deleteMany({ project_id: project._id, deleted_on: { $gt: 0 } }),
+    DriveFolder.deleteMany({ project_id: project._id, deleted_on: { $gt: 0 } }),
+    ...(deletedFolderIds.length > 0
+      ? [DriveFolderAccess.deleteMany({ project_id: project._id, folder_id: { $in: deletedFolderIds }, deleted_on: { $gt: 0 } })]
+      : []),
+  ]);
+
+  return { message: 'Trash emptied successfully' };
+};
+
+export default {
+  listTrash,
+  restoreItem,
+  permanentDelete,
+  emptyTrash,
+};

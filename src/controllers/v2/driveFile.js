@@ -1,5 +1,3 @@
-import formatter from 'zillit-libs/utils/formatter';
-import { httpStatusCodes } from 'zillit-libs/config';
 import ApiResponse from 'zillit-libs/utils/api-response';
 
 import DriveFileService from '../../services/v2/driveFile.js';
@@ -97,13 +95,56 @@ class DriveFile {
 
   async getFilesByType(req, res) {
     const {
-      project, query
+      user, project, query
     } = req;
     try {
-      const files = await DriveFileService.getFilesByType({ project, query });
+      const files = await DriveFileService.getFilesByType({ user, project, query });
       return ApiResponse.handleResponse(res, { message: 'files_by_type_fetched', data: files });
     } catch (error) {
       console.log('[files_by_type_fetch_failed]:');
+      return ApiResponse.handleError(res, error);
+    }
+  }
+
+  async getFileStreamUrl(req, res) {
+    const {
+      user, project, params, query,
+    } = req;
+    try {
+      const streamData = await DriveFileService.getFileStreamUrl({
+        user, project, params, query,
+      });
+      return ApiResponse.handleResponse(res, { message: 'file_stream_url_generated', data: streamData });
+    } catch (error) {
+      console.log('[file_stream_url_failed]:');
+      return ApiResponse.handleError(res, error);
+    }
+  }
+
+  async getFilePreviewUrl(req, res) {
+    const {
+      user, project, params, query,
+    } = req;
+    try {
+      const streamData = await DriveFileService.getFilePreviewUrl({
+        user, project, params, query,
+      });
+      return ApiResponse.handleResponse(res, { message: 'file_preview_url_generated', data: streamData });
+    } catch (error) {
+      console.log('[file_preview_url_failed]:');
+      return ApiResponse.handleError(res, error);
+    }
+  }
+
+  async generateShareLink(req, res) {
+    const { user, project, params, body } = req;
+    try {
+      const result = await DriveFileService.generateShareLink({
+        user, project, params, body,
+      });
+      return ApiResponse.handleResponse(res, { message: 'share_link_generated', data: result });
+    } catch (error) {
+      console.log('[share_link_generation_failed]:');
       return ApiResponse.handleError(res, error);
     }
   }
