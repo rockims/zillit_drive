@@ -31,7 +31,7 @@ const getCollaboraEditorUrl = async () => {
     // Extract urlsrc from XML: urlsrc="http://localhost:9980/browser/HASH/cool.html?"
     const match = xml.match(/urlsrc="([^"]*cool\.html[^"]*)"/);
     if (match) {
-      _collaboraEditorUrl = match[1].replace(/\?$/, ''); // remove trailing ?
+      _collaboraEditorUrl = match[1].replace(/\?$/, '').replace(/^http:\/\//, 'https://'); // remove trailing ? and force https
       _collaboraEditorUrlExpiry = Date.now() + 60 * 60 * 1000; // 1 hour cache
       console.log(`[driveEditor] Collabora editor URL: ${_collaboraEditorUrl}`);
       return _collaboraEditorUrl;
