@@ -396,22 +396,41 @@ const getFolders = async ({ user, project, query }) => {
     skip: pagination.enabled ? pagination.offset : null,
   });
 
+  // Resolve current user's permissions for each folder
+  const ROLE_TO_PERMS = {
+    owner: { can_view: true, can_edit: true, can_download: true, can_delete: true },
+    editor: { can_view: true, can_edit: true, can_download: true, can_delete: false },
+    viewer: { can_view: true, can_edit: false, can_download: false, can_delete: false },
+  };
+  const foldersWithPermissions = await Promise.all(
+    folders.map(async (folder) => {
+      const folderObj = typeof folder.toObject === 'function' ? folder.toObject() : { ...folder };
+      try {
+        const role = await DriveAccessService.resolveFolderRole({ user, project, folder });
+        folderObj._userPermissions = role ? (ROLE_TO_PERMS[role] || ROLE_TO_PERMS.viewer) : { can_view: true, can_edit: false, can_download: false, can_delete: false };
+      } catch {
+        folderObj._userPermissions = { can_view: true, can_edit: false, can_download: false, can_delete: false };
+      }
+      return folderObj;
+    }),
+  );
+
   if (!shouldReturnMeta) {
-    return folders;
+    return foldersWithPermissions;
   }
 
   const total = await DriveFolderRepository.countFolders({ filters: finalFilters });
 
   return {
-    items: folders,
+    items: foldersWithPermissions,
     pagination: {
       total,
       limit: pagination.limit,
       offset: pagination.offset,
-      has_more: pagination.offset + folders.length < total,
+      has_more: pagination.offset + foldersWithPermissions.length < total,
     },
     grouping: buildFolderGrouping({
-      items: folders,
+      items: foldersWithPermissions,
       groupBy: listingQuery.groupBy,
     }),
   };
@@ -947,11 +966,12 @@ const deleteFolder = async ({ user, project, device, params }) => {
     throw new BadRequest('folder_not_found');
   }
 
+  // Only owner/admin can delete folders
   await DriveAccessService.assertFolderAccess({
     user,
     project,
     folder,
-    minRole: 'editor',
+    minRole: 'owner',
   });
 
   const folderIds = await DriveAccessService.collectDescendantFolderIds({

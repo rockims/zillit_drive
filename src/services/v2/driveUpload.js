@@ -15,6 +15,7 @@ import { rights } from 'zillit-libs/services-v2/permissions';
 
 import DriveFileRepository from '../../repositories/v2/driveFile.js';
 import DriveFolderRepository from '../../repositories/v2/driveFolder.js';
+import DriveFileAccessRepository from '../../repositories/v2/driveFileAccess.js';
 import DriveAccessService from './driveAccess.js';
 import DriveFileAccessService from './driveFileAccess.js';
 import DriveUploadSession from 'zillit-libs/mongo-models-v2/DriveUploadSession';
@@ -328,31 +329,44 @@ const completeUpload = async ({ user, project, device, params, body }) => {
     // Non-blocking — file is still created even if access seeding fails
   }
 
-  // Send notifications
-  const usersIds = await _viewingRightsUsers(project);
-  const folderId = session.folder_id ? session.folder_id.toString() : null;
-  await NotificationService.notifyAll(
-    {
-      project,
-      sender: file.created_by,
-      receiver: usersIds,
-      section: sections.TOOLS,
-      tool: DRIVE_TOOL,
-      unit: DRIVE_UNIT_FILE,
-      action: 'drive_file_uploaded',
-      reference_id: file._id,
-      level_1: folderId || 'root',
-      level_2: toIdString(file._id),
-      reference_data: {
-        file_id: toIdString(file._id),
-        file_name: file.file_name,
-        folder_id: folderId,
-      },
-      message: `New file "${file.file_name}" uploaded`,
+  // Send notifications — only to users who have explicit file access (not all drive viewers)
+  const fileAccessRecords = await DriveFileAccessRepository.getAccesses({
+    filters: {
+      project_id: project._id,
+      file_id: file._id,
+      deleted_on: 0,
     },
-    { notify: true, save: true },
-    socketClient,
-  );
+  });
+  const accessUserIds = fileAccessRecords
+    .map((r) => r.user_id?.toString())
+    .filter((id) => id && id !== file.created_by?.toString()); // exclude uploader (sender)
+  const folderId = session.folder_id ? session.folder_id.toString() : null;
+  if (accessUserIds.length === 0) {
+    // No one to notify — skip notification but still emit socket event
+  } else {
+    await NotificationService.notifyAll(
+      {
+        project,
+        sender: file.created_by,
+        receiver: accessUserIds,
+        section: sections.TOOLS,
+        tool: DRIVE_TOOL,
+        unit: DRIVE_UNIT_FILE,
+        action: 'drive_file_uploaded',
+        reference_id: file._id,
+        level_1: folderId || 'root',
+        level_2: toIdString(file._id),
+        reference_data: {
+          file_id: toIdString(file._id),
+          file_name: file.file_name,
+          folder_id: folderId,
+        },
+        message: `New file "${file.file_name}" uploaded`,
+      },
+      { notify: true, save: true },
+      socketClient,
+    );
+  }
 
   // Emit socket event
   socketClient('__admin_events__', {

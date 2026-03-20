@@ -19,9 +19,9 @@ const toIdString = (value) => (value ? value.toString() : null);
  * Used as fallback when no DriveFileAccess record exists.
  */
 const ROLE_TO_PERMISSIONS = {
-  owner: { can_view: true, can_edit: true, can_download: true },
-  editor: { can_view: true, can_edit: true, can_download: true },
-  viewer: { can_view: true, can_edit: false, can_download: false },
+  owner: { can_view: true, can_edit: true, can_download: true, can_delete: true },
+  editor: { can_view: true, can_edit: true, can_download: true, can_delete: false },
+  viewer: { can_view: true, can_edit: false, can_download: false, can_delete: false },
 };
 
 /* ───────────── Resolve File Permission ───────────── */
@@ -39,7 +39,7 @@ const resolveFilePermission = async ({ user, project, file }) => {
 
   // Admin gets full access
   if (user.admin_access) {
-    return { can_view: true, can_edit: true, can_download: true };
+    return { can_view: true, can_edit: true, can_download: true, can_delete: true };
   }
 
   // Check explicit file-level access
@@ -57,12 +57,13 @@ const resolveFilePermission = async ({ user, project, file }) => {
       can_view: fileAccess.can_view,
       can_edit: fileAccess.can_edit,
       can_download: fileAccess.can_download,
+      can_delete: fileAccess.can_delete || false,
     };
   }
 
-  // File creator always gets full access
+  // File creator always gets full access (they are the owner)
   if (toIdString(file.created_by) === toIdString(user._id)) {
-    return { can_view: true, can_edit: true, can_download: true };
+    return { can_view: true, can_edit: true, can_download: true, can_delete: true };
   }
 
   // Fall back to folder-level permissions
@@ -118,7 +119,7 @@ const seedFileAccess = async ({ project, user, file, entries = [] }) => {
   const fileId = file._id;
   const grantedBy = user._id;
 
-  // Always create full-access record for the uploader
+  // Always create full-access record for the uploader (owner — can_delete: true)
   await DriveFileAccessRepository.upsertAccess({
     filters: {
       project_id: projectId,
@@ -133,6 +134,7 @@ const seedFileAccess = async ({ project, user, file, entries = [] }) => {
       can_view: true,
       can_edit: true,
       can_download: true,
+      can_delete: true,
       granted_by: grantedBy,
       created_on: now,
       updated_on: now,
@@ -140,7 +142,7 @@ const seedFileAccess = async ({ project, user, file, entries = [] }) => {
     },
   });
 
-  // Create entries for explicitly specified users
+  // Create entries for explicitly specified users (editors — can_delete defaults to false)
   if (entries.length > 0) {
     await Promise.all(
       entries
@@ -160,6 +162,7 @@ const seedFileAccess = async ({ project, user, file, entries = [] }) => {
               can_view: entry.can_view !== undefined ? entry.can_view : true,
               can_edit: entry.can_edit !== undefined ? entry.can_edit : false,
               can_download: entry.can_download !== undefined ? entry.can_download : true,
+              can_delete: entry.can_delete !== undefined ? entry.can_delete : false,
               granted_by: grantedBy,
               created_on: now,
               updated_on: now,
@@ -230,16 +233,18 @@ const setFileAccessList = async ({ user, project, fileId, entries }) => {
       can_view: entry.can_view !== undefined ? entry.can_view : true,
       can_edit: entry.can_edit !== undefined ? entry.can_edit : false,
       can_download: entry.can_download !== undefined ? entry.can_download : true,
+      can_delete: entry.can_delete !== undefined ? entry.can_delete : false,
     });
   });
 
-  // Ensure actor keeps full access
+  // Ensure actor keeps full access (owner-level)
   const actorId = toIdString(user._id);
   normalizedEntries.set(actorId, {
     user_id: user._id,
     can_view: true,
     can_edit: true,
     can_download: true,
+    can_delete: true,
   });
 
   // Soft-delete entries for users not in the new list
@@ -274,6 +279,7 @@ const setFileAccessList = async ({ user, project, fileId, entries }) => {
           can_view: entry.can_view,
           can_edit: entry.can_edit,
           can_download: entry.can_download,
+          can_delete: entry.can_delete || false,
           granted_by: grantedBy,
           updated_on: now,
           deleted_on: 0,
