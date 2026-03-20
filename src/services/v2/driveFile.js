@@ -179,24 +179,60 @@ const _getFolderById = ({ project, folderId }) => DriveFolderRepository.getFolde
   },
 });
 
-const _assertRootFileReadAccess = ({ user, file }) => {
+const _assertRootFileReadAccess = async ({ user, file, project }) => {
   if (user.admin_access) {
     return;
   }
 
-  if (!idsEqual(file.created_by, user._id)) {
-    throw new Forbidden('insufficient_permissions');
+  // File creator always has access
+  if (idsEqual(file.created_by, user._id)) {
+    return;
   }
+
+  // Check if user has explicit file-level access (e.g. file was shared with them)
+  if (project) {
+    const fileAccess = await DriveFileAccessRepository.getAccess({
+      filters: {
+        project_id: project._id,
+        file_id: file._id,
+        user_id: user._id,
+        deleted_on: 0,
+      },
+    });
+    if (fileAccess && fileAccess.can_view) {
+      return;
+    }
+  }
+
+  throw new Forbidden('insufficient_permissions');
 };
 
-const _assertRootFileWriteAccess = ({ user, file }) => {
+const _assertRootFileWriteAccess = async ({ user, file, project }) => {
   if (user.admin_access) {
     return;
   }
 
-  if (!idsEqual(file.created_by, user._id)) {
-    throw new Forbidden('insufficient_permissions');
+  // File creator always has write access
+  if (idsEqual(file.created_by, user._id)) {
+    return;
   }
+
+  // Check if user has explicit file-level edit access
+  if (project) {
+    const fileAccess = await DriveFileAccessRepository.getAccess({
+      filters: {
+        project_id: project._id,
+        file_id: file._id,
+        user_id: user._id,
+        deleted_on: 0,
+      },
+    });
+    if (fileAccess && fileAccess.can_edit) {
+      return;
+    }
+  }
+
+  throw new Forbidden('insufficient_permissions');
 };
 
 const createFile = async ({ user, project, device, body }) => {
@@ -548,7 +584,7 @@ const getFile = async ({ user, project, params }) => {
       minRole: 'viewer',
     });
   } else {
-    _assertRootFileReadAccess({ user, file });
+    await _assertRootFileReadAccess({ user, file, project });
   }
 
   // Enforce file-level permissions (falls back to folder role if no explicit record)
@@ -597,7 +633,7 @@ const updateFile = async ({ user, project, device, params, body }) => {
       minRole: 'editor',
     });
   } else {
-    _assertRootFileWriteAccess({ user, file: existingFile });
+    await _assertRootFileWriteAccess({ user, file: existingFile, project });
   }
 
   // Enforce file-level edit permission
@@ -727,25 +763,8 @@ const deleteFile = async ({ user, project, device, params }) => {
     throw new BadRequest('file_not_found');
   }
 
-  if (file.folder_id) {
-    const parentFolder = await _getFolderById({
-      project,
-      folderId: file.folder_id,
-    });
-
-    if (!parentFolder) {
-      throw new BadRequest('folder_not_found');
-    }
-
-    await DriveAccessService.assertFolderAccess({
-      user,
-      project,
-      folder: parentFolder,
-      minRole: 'editor',
-    });
-  } else {
-    _assertRootFileWriteAccess({ user, file });
-  }
+  // Check delete permission — only owner/admin/creator can delete
+  await DriveFileAccessService.assertFileAccess({ user, project, file, permission: 'delete' });
 
   const deleteTimestamp = Date.now();
   const deleteData = {
@@ -834,7 +853,7 @@ const moveFile = async ({ user, project, device, params, body }) => {
       minRole: 'editor',
     });
   } else {
-    _assertRootFileWriteAccess({ user, file });
+    await _assertRootFileWriteAccess({ user, file, project });
   }
 
   if (target_folder_id) {

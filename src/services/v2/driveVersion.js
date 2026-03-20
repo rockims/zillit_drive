@@ -1,4 +1,4 @@
-import { S3Client, GetObjectCommand } from '@aws-sdk/client-s3';
+import { S3Client, GetObjectCommand, CopyObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import DriveFileVersion from 'zillit-libs/mongo-models-v2/DriveFileVersion';
 import DriveFileRepository from '../../repositories/v2/driveFile.js';
@@ -39,7 +39,9 @@ const listVersions = async ({ project, params }) => {
 };
 
 // ── Save current file state as a version (called before overwriting) ──
-const createVersionSnapshot = async ({ projectId, file, userId }) => {
+// @param overrideS3Key — if provided, use this key instead of the file's current S3 key
+//   (used when the caller copies the old content to a versioned key before overwriting)
+const createVersionSnapshot = async ({ projectId, file, userId, overrideS3Key = null }) => {
   // Determine the next version number
   const latestVersion = await DriveFileVersion.findOne({
     project_id: projectId,
@@ -48,8 +50,9 @@ const createVersionSnapshot = async ({ projectId, file, userId }) => {
 
   const nextVersion = latestVersion ? latestVersion.version_number + 1 : 1;
 
-  // Extract S3 key from file
-  const s3Key = file.file_path
+  // Extract S3 key from file (or use the override if provided)
+  const s3Key = overrideS3Key
+    || file.file_path
     || file.attachments?.[0]?.media
     || file.attachments?.[0]?.file_path;
 
@@ -121,25 +124,57 @@ const restoreVersion = async ({ user, project, params }) => {
 
   if (!file) throw new BadRequest('file_not_found');
 
-  // Snapshot the current file before restoring
-  await createVersionSnapshot({ projectId: project._id, file, userId: user._id });
+  // Get the current file's S3 info
+  const currentS3Key = file.file_path
+    || file.attachments?.[0]?.media
+    || file.attachments?.[0]?.file_path;
+  const currentBucket = file.attachments?.[0]?.bucket || S3_BUCKET;
+  const currentRegion = file.attachments?.[0]?.region || S3_DEFAULT_REGION;
 
-  // Restore — update the file's S3 key, size, and metadata
+  // Copy current file to a versioned S3 key before overwriting
+  const versionTimestamp = Date.now();
+  const ext = currentS3Key?.includes('.') ? currentS3Key.substring(currentS3Key.lastIndexOf('.')) : '';
+  const basePath = currentS3Key?.includes('.') ? currentS3Key.substring(0, currentS3Key.lastIndexOf('.')) : currentS3Key;
+  const versionedS3Key = `${basePath}_v${versionTimestamp}${ext}`;
+
+  if (currentS3Key) {
+    try {
+      const s3 = getS3Client(currentRegion);
+      await s3.send(new CopyObjectCommand({
+        Bucket: currentBucket,
+        CopySource: `${currentBucket}/${currentS3Key}`,
+        Key: versionedS3Key,
+      }));
+    } catch (copyErr) {
+      console.error('[restore_version] Failed to copy current file:', copyErr.message);
+    }
+  }
+
+  // Snapshot the current file before restoring (using versioned copy key)
+  await createVersionSnapshot({ projectId: project._id, file, userId: user._id, overrideS3Key: versionedS3Key });
+
+  // Copy the old version's S3 object back to the original key
+  if (version.s3_key && currentS3Key) {
+    try {
+      const s3 = getS3Client(version.s3_region || S3_DEFAULT_REGION);
+      await s3.send(new CopyObjectCommand({
+        Bucket: currentBucket,
+        CopySource: `${version.s3_bucket}/${version.s3_key}`,
+        Key: currentS3Key,
+      }));
+    } catch (copyErr) {
+      console.error('[restore_version] Failed to copy restored version:', copyErr.message);
+    }
+  }
+
+  // Restore — update the file metadata (keep original S3 key, content was copied back)
   const now = Date.now();
   await DriveFileRepository.updateFile({
     filters: { _id: fileId, project_id: project._id },
     data: {
       file_name: version.file_name,
-      file_path: version.s3_key,
       file_size_bytes: version.file_size_bytes,
       mime_type: version.mime_type,
-      attachments: [{
-        media: version.s3_key,
-        file_path: version.s3_key,
-        bucket: version.s3_bucket,
-        region: version.s3_region,
-        file_size: String(version.file_size_bytes || 0),
-      }],
       updated_by: user._id,
       updated_on: now,
     },

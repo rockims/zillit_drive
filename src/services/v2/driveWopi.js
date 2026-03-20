@@ -1,4 +1,4 @@
-import { S3Client, GetObjectCommand, PutObjectCommand } from '@aws-sdk/client-s3';
+import { S3Client, GetObjectCommand, PutObjectCommand, CopyObjectCommand } from '@aws-sdk/client-s3';
 import BadRequest from 'zillit-libs/errors/BadRequest';
 import Forbidden from 'zillit-libs/errors/Forbidden';
 
@@ -189,16 +189,36 @@ const putFileContents = async ({ params, query, req }) => {
   }
   const fileBuffer = Buffer.concat(chunks);
 
-  // Create version snapshot before overwriting
+  const { s3Key, bucket, region } = getFileS3Info(file);
+  const s3 = getS3Client(region);
+
+  // Copy current file to a versioned S3 key BEFORE overwriting
+  // This preserves the old content so the version snapshot can reference it
+  const versionTimestamp = Date.now();
+  const ext = s3Key.includes('.') ? s3Key.substring(s3Key.lastIndexOf('.')) : '';
+  const basePath = s3Key.includes('.') ? s3Key.substring(0, s3Key.lastIndexOf('.')) : s3Key;
+  const versionedS3Key = `${basePath}_v${versionTimestamp}${ext}`;
+
+  try {
+    await s3.send(new CopyObjectCommand({
+      Bucket: bucket,
+      CopySource: `${bucket}/${s3Key}`,
+      Key: versionedS3Key,
+    }));
+  } catch (copyErr) {
+    console.error('[wopi_putfile] Failed to copy current version to versioned key:', copyErr.message);
+    // Continue even if copy fails — don't block the save
+  }
+
+  // Create version snapshot pointing to the versioned S3 key (the copy of the old content)
   await DriveVersionService.createVersionSnapshot({
     projectId: tokenPayload.projectId,
     file,
     userId: tokenPayload.userId,
+    overrideS3Key: versionedS3Key,
   });
 
-  // Upload to S3 (overwrite existing)
-  const { s3Key, bucket, region } = getFileS3Info(file);
-  const s3 = getS3Client(region);
+  // Upload new content to S3 (overwrite the original key)
 
   await s3.send(new PutObjectCommand({
     Bucket: bucket,

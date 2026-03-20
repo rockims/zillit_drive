@@ -64,9 +64,9 @@ const bulkDelete = async ({ user, project, device, body }) => {
           continue;
         }
 
-        // Check access
+        // Only owner/admin can delete folders
         await DriveAccessService.assertFolderAccess({
-          user, project, folder, minRole: 'editor',
+          user, project, folder, minRole: 'owner',
         });
 
         const folderIds = await DriveAccessService.collectDescendantFolderIds({
@@ -96,8 +96,8 @@ const bulkDelete = async ({ user, project, device, body }) => {
           continue;
         }
 
-        // Enforce file-level edit permission before deleting
-        await DriveFileAccessService.assertFileAccess({ user, project, file, permission: 'edit' });
+        // Enforce file-level delete permission (only owner/admin can delete)
+        await DriveFileAccessService.assertFileAccess({ user, project, file, permission: 'delete' });
 
         await DriveFileRepository.deleteFile({
           filters: { _id: item.id, project_id: project._id, deleted_on: 0 },
