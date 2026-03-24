@@ -4,35 +4,27 @@ import DriveFileAccessRepository from '../../repositories/v2/driveFileAccess.js'
 /**
  * DriveStorageService — compute storage usage statistics.
  *
- * Admin users see project-wide totals.
- * Non-admin users see only storage for files they own or have access to.
+ * Every user sees only storage for files they own or have access to.
  */
 
 const getStorageUsage = async ({ user, project }) => {
   const DriveFile = (await import('zillit-libs/mongo-models-v2/DriveFile')).default;
-  const isAdmin = !!user.admin_access;
 
-  // Build the match filter — admins see everything, non-admins see only their files
-  let activeMatch = { project_id: project._id, deleted_on: 0 };
-  let trashMatch = { project_id: project._id, deleted_on: { $gt: 0 } };
+  // Get file IDs this user has explicit access to
+  const userFileAccessRecords = await DriveFileAccessRepository.getAccesses({
+    filters: { project_id: project._id, user_id: user._id },
+  });
+  const accessibleFileIds = userFileAccessRecords.map((a) => a.file_id);
 
-  if (!isAdmin) {
-    // Get file IDs this user has explicit access to
-    const userFileAccessRecords = await DriveFileAccessRepository.getAccesses({
-      filters: { project_id: project._id, user_id: user._id },
-    });
-    const accessibleFileIds = userFileAccessRecords.map((a) => a.file_id);
+  const userFileFilter = {
+    $or: [
+      { created_by: user._id },
+      { _id: { $in: accessibleFileIds } },
+    ],
+  };
 
-    const userFileFilter = {
-      $or: [
-        { created_by: user._id },
-        { _id: { $in: accessibleFileIds } },
-      ],
-    };
-
-    activeMatch = { ...activeMatch, ...userFileFilter };
-    trashMatch = { ...trashMatch, ...userFileFilter };
-  }
+  const activeMatch = { project_id: project._id, deleted_on: 0, ...userFileFilter };
+  const trashMatch = { project_id: project._id, deleted_on: { $gt: 0 }, ...userFileFilter };
 
   const [result] = await DriveFile.aggregate([
     { $match: activeMatch },

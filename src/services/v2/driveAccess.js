@@ -1,5 +1,6 @@
 import mongoose from 'mongoose';
 import Forbidden from 'zillit-libs/errors/Forbidden';
+import NotificationService from 'zillit-libs/services-v2/notification';
 import DriveFolder from 'zillit-libs/mongo-models-v2/DriveFolder';
 
 import DriveFolderRepository from '../../repositories/v2/driveFolder.js';
@@ -10,6 +11,14 @@ import {
   hasMinRole,
   pickHigherRole,
 } from './driveAccessRoles.js';
+import socketClient from '../../config/socketClient.js';
+
+const {
+  sections, tools, units,
+} = NotificationService.NotificationConstants;
+
+const DRIVE_TOOL = 'drive_label';
+const DRIVE_UNIT_FOLDER = 'drive_folder_label';
 
 const toIdString = (value) => (value ? value.toString() : null);
 
@@ -75,10 +84,6 @@ const ensureFolderOwnerAccess = async ({ project, folder }) => {
 const resolveFolderRole = async ({ user, project, folder }) => {
   if (!user || !project || !folder) {
     return null;
-  }
-
-  if (user.admin_access) {
-    return 'owner';
   }
 
   // NOTE: ensureFolderOwnerAccess removed — seedFolderAccess already creates
@@ -242,10 +247,6 @@ const collectDescendantFolderIds = async ({ projectId, rootFolderId, includeRoot
  * Replaces BFS loop with batch expansion from seed folders (2 queries + 1 aggregation).
  */
 const listAccessibleFolderIds = async ({ user, project }) => {
-  if (user.admin_access) {
-    return null;
-  }
-
   // Get seed folder IDs: direct access + owned folders + folders containing files
   // the user has explicit file-level access to (3 parallel queries)
   const [directIds, ownFolders, fileAccessIds] = await Promise.all([
@@ -532,6 +533,47 @@ const setFolderAccessList = async ({
       })
     )
   );
+
+  // Notify new recipients about folder sharing
+  const newReceiverIds = Array.from(normalizedByUser.keys())
+    .filter((id) => id !== toIdString(user._id));
+
+  if (newReceiverIds.length > 0) {
+    try {
+      await NotificationService.notifyAll(
+        {
+          project,
+          sender: user._id,
+          receiver: newReceiverIds,
+          section: sections.TOOLS,
+          tool: DRIVE_TOOL,
+          unit: DRIVE_UNIT_FOLDER,
+          action: 'drive_folder_shared',
+          reference_id: folder._id,
+          level_1: toIdString(folder._id),
+          reference_data: {
+            folder_id: toIdString(folder._id),
+            folder_name: folder.folder_name,
+          },
+          message: `Folder "${folder.folder_name}" shared with you`,
+        },
+        { notify: true, save: true },
+        socketClient,
+      );
+    } catch (notifErr) {
+      console.error('[driveAccess] Folder share notification error:', notifErr.message);
+    }
+
+    socketClient('__admin_events__', {
+      event: 'drive:folder:shared',
+      room: `${project._id.toString()}_room`,
+      data: {
+        project_id: project._id,
+        folder,
+        shared_with: newReceiverIds,
+      },
+    });
+  }
 
   return getFolderAccessList({
     user,

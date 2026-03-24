@@ -22,7 +22,6 @@ import socketClient from '../../config/socketClient.js';
 const listTrash = async ({ user, project, query }) => {
   const limit = Math.min(parseInt(query?.limit, 10) || 50, 200);
   const offset = Math.max(parseInt(query?.offset, 10) || 0, 0);
-  const isAdmin = !!user.admin_access;
 
   const baseFileFilter = {
     project_id: project._id,
@@ -33,33 +32,29 @@ const listTrash = async ({ user, project, query }) => {
     deleted_on: { $gt: 0 },
   };
 
-  // Non-admin users only see their own trashed items
+  // Every user only sees their own trashed items
   // (items they created OR items they had explicit file/folder access to)
-  if (!isAdmin) {
-    // Files: user created OR has explicit file access record
-    const userFileAccessRecords = await DriveFileAccessRepository.getAccesses({
-      filters: { project_id: project._id, user_id: user._id },
-    });
-    const accessibleFileIds = userFileAccessRecords.map((a) => a.file_id);
+  const userFileAccessRecords = await DriveFileAccessRepository.getAccesses({
+    filters: { project_id: project._id, user_id: user._id },
+  });
+  const accessibleFileIds = userFileAccessRecords.map((a) => a.file_id);
 
-    baseFileFilter.$or = [
-      { created_by: user._id },
-      { _id: { $in: accessibleFileIds } },
-    ];
+  baseFileFilter.$or = [
+    { created_by: user._id },
+    { _id: { $in: accessibleFileIds } },
+  ];
 
-    // Folders: user created OR has explicit folder access record
-    const DriveFolderAccess = (await import('zillit-libs/mongo-models-v2/DriveFolderAccess')).default;
-    const userFolderAccessRecords = await DriveFolderAccess.find({
-      project_id: project._id,
-      user_id: user._id,
-    }).lean();
-    const accessibleFolderIds = userFolderAccessRecords.map((a) => a.folder_id);
+  const DriveFolderAccess = (await import('zillit-libs/mongo-models-v2/DriveFolderAccess')).default;
+  const userFolderAccessRecords = await DriveFolderAccess.find({
+    project_id: project._id,
+    user_id: user._id,
+  }).lean();
+  const accessibleFolderIds = userFolderAccessRecords.map((a) => a.folder_id);
 
-    baseFolderFilter.$or = [
-      { created_by: user._id },
-      { _id: { $in: accessibleFolderIds } },
-    ];
-  }
+  baseFolderFilter.$or = [
+    { created_by: user._id },
+    { _id: { $in: accessibleFolderIds } },
+  ];
 
   // Optional search within trash
   if (query?.search) {
@@ -104,7 +99,6 @@ const listTrash = async ({ user, project, query }) => {
     total: fileCount + folderCount,
     limit,
     offset,
-    _isAdmin: isAdmin,
   };
 };
 
@@ -115,7 +109,6 @@ const listTrash = async ({ user, project, query }) => {
 const restoreItem = async ({ user, project, device, params }) => {
   const { itemId } = params;
   const { type } = params; // 'file' or 'folder'
-  const isAdmin = !!user.admin_access;
 
   const now = Date.now();
   const restoreData = {
@@ -134,8 +127,8 @@ const restoreItem = async ({ user, project, device, params }) => {
       throw new BadRequest('folder_not_found_in_trash');
     }
 
-    // Only admin or the person who created the folder can restore it
-    if (!isAdmin && String(folder.created_by) !== String(user._id)) {
+    // Only the folder creator can restore it
+    if (String(folder.created_by) !== String(user._id)) {
       throw new Forbidden('insufficient_permissions_to_restore');
     }
 
@@ -226,8 +219,8 @@ const restoreItem = async ({ user, project, device, params }) => {
     throw new BadRequest('file_not_found_in_trash');
   }
 
-  // Only admin or the file creator can restore
-  if (!isAdmin && String(file.created_by) !== String(user._id)) {
+  // Only the file creator can restore
+  if (String(file.created_by) !== String(user._id)) {
     throw new Forbidden('insufficient_permissions_to_restore');
   }
 
@@ -268,22 +261,19 @@ const restoreItem = async ({ user, project, device, params }) => {
 const permanentDelete = async ({ user, project, device, params }) => {
   const { itemId } = params;
   const { type } = params; // 'file' or 'folder'
-  const isAdmin = !!user.admin_access;
 
   if (type === 'folder') {
-    const folderCheck = await DriveFolderRepository.getFolder({
-      filters: { _id: itemId, project_id: project._id, deleted_on: { $gt: 0 } },
-    });
-    // Only admin or the creator can permanently delete
-    if (!isAdmin && (!folderCheck || String(folderCheck.created_by) !== String(user._id))) {
-      throw new Forbidden('only_admin_or_creator_can_permanently_delete');
-    }
     const folder = await DriveFolderRepository.getFolder({
       filters: { _id: itemId, project_id: project._id, deleted_on: { $gt: 0 } },
     });
 
     if (!folder) {
       throw new BadRequest('folder_not_found_in_trash');
+    }
+
+    // Only the folder creator can permanently delete
+    if (String(folder.created_by) !== String(user._id)) {
+      throw new Forbidden('only_creator_can_permanently_delete');
     }
 
     // NOTE: Actual S3 object cleanup would be an async job.
@@ -330,9 +320,9 @@ const permanentDelete = async ({ user, project, device, params }) => {
     throw new BadRequest('file_not_found_in_trash');
   }
 
-  // Only admin or the file creator can permanently delete
-  if (!isAdmin && String(file.created_by) !== String(user._id)) {
-    throw new Forbidden('only_admin_or_creator_can_permanently_delete');
+  // Only the file creator can permanently delete
+  if (String(file.created_by) !== String(user._id)) {
+    throw new Forbidden('only_creator_can_permanently_delete');
   }
 
   const DriveFile = (await import('zillit-libs/mongo-models-v2/DriveFile')).default;
@@ -342,27 +332,23 @@ const permanentDelete = async ({ user, project, device, params }) => {
 };
 
 // ───────────────────────────────────────────────────────────
-//  Empty entire trash (admin only)
+//  Empty user's own trash
 // ───────────────────────────────────────────────────────────
 
 const emptyTrash = async ({ user, project }) => {
-  // Only admins can empty the entire trash
-  if (!user.admin_access) {
-    throw new Forbidden('only_admins_can_empty_trash');
-  }
-
   const DriveFile = (await import('zillit-libs/mongo-models-v2/DriveFile')).default;
   const DriveFolder = (await import('zillit-libs/mongo-models-v2/DriveFolder')).default;
   const DriveFolderAccess = (await import('zillit-libs/mongo-models-v2/DriveFolderAccess')).default;
 
+  // Only delete items the user created (their own trash)
   const deletedFolders = await DriveFolderRepository.getFolders({
-    filters: { project_id: project._id, deleted_on: { $gt: 0 } },
+    filters: { project_id: project._id, created_by: user._id, deleted_on: { $gt: 0 } },
   });
   const deletedFolderIds = deletedFolders.map((f) => f._id);
 
   await Promise.all([
-    DriveFile.deleteMany({ project_id: project._id, deleted_on: { $gt: 0 } }),
-    DriveFolder.deleteMany({ project_id: project._id, deleted_on: { $gt: 0 } }),
+    DriveFile.deleteMany({ project_id: project._id, created_by: user._id, deleted_on: { $gt: 0 } }),
+    DriveFolder.deleteMany({ project_id: project._id, created_by: user._id, deleted_on: { $gt: 0 } }),
     ...(deletedFolderIds.length > 0
       ? [DriveFolderAccess.deleteMany({ project_id: project._id, folder_id: { $in: deletedFolderIds }, deleted_on: { $gt: 0 } })]
       : []),

@@ -180,10 +180,6 @@ const _getFolderById = ({ project, folderId }) => DriveFolderRepository.getFolde
 });
 
 const _assertRootFileReadAccess = async ({ user, file, project }) => {
-  if (user.admin_access) {
-    return;
-  }
-
   // File creator always has access
   if (idsEqual(file.created_by, user._id)) {
     return;
@@ -208,10 +204,6 @@ const _assertRootFileReadAccess = async ({ user, file, project }) => {
 };
 
 const _assertRootFileWriteAccess = async ({ user, file, project }) => {
-  if (user.admin_access) {
-    return;
-  }
-
   // File creator always has write access
   if (idsEqual(file.created_by, user._id)) {
     return;
@@ -404,46 +396,21 @@ const getFiles = async ({ user, project, query }) => {
     filters.folder_id = query.folder_id;
 
     // Check if user has folder-level access
-    if (!user.admin_access) {
-      let hasFolderAccess = false;
-      try {
-        await DriveAccessService.assertFolderAccess({
-          user,
-          project,
-          folder,
-          minRole: 'viewer',
-        });
-        hasFolderAccess = true;
-      } catch {
-        hasFolderAccess = false;
-      }
-
-      if (!hasFolderAccess) {
-        // User doesn't have folder access — only show files they have explicit file-level access to
-        const accessibleFileIds = await DriveFileAccessRepository.distinctFileIds({
-          filters: {
-            project_id: project._id,
-            user_id: user._id,
-            can_view: true,
-            deleted_on: 0,
-          },
-        });
-
-        if (accessibleFileIds.length === 0) {
-          // No accessible files in this folder at all
-          throw new Forbidden('insufficient_permissions');
-        }
-
-        filters.$or = [
-          { created_by: user._id },
-          { _id: { $in: accessibleFileIds } },
-        ];
-      }
+    let hasFolderAccess = false;
+    try {
+      await DriveAccessService.assertFolderAccess({
+        user,
+        project,
+        folder,
+        minRole: 'viewer',
+      });
+      hasFolderAccess = true;
+    } catch {
+      hasFolderAccess = false;
     }
-  } else if (query.folder_id === null || query.root === 'true') {
-    filters.folder_id = null;
-    if (!user.admin_access) {
-      // Show root files the user created OR has explicit access to
+
+    if (!hasFolderAccess) {
+      // User doesn't have folder access — only show files they have explicit file-level access to
       const accessibleFileIds = await DriveFileAccessRepository.distinctFileIds({
         filters: {
           project_id: project._id,
@@ -452,12 +419,33 @@ const getFiles = async ({ user, project, query }) => {
           deleted_on: 0,
         },
       });
+
+      if (accessibleFileIds.length === 0) {
+        // No accessible files in this folder at all
+        throw new Forbidden('insufficient_permissions');
+      }
+
       filters.$or = [
         { created_by: user._id },
-        ...(accessibleFileIds.length > 0 ? [{ _id: { $in: accessibleFileIds } }] : []),
+        { _id: { $in: accessibleFileIds } },
       ];
     }
-  } else if (!user.admin_access) {
+  } else if (query.folder_id === null || query.root === 'true') {
+    filters.folder_id = null;
+    // Show root files the user created OR has explicit access to
+    const accessibleFileIds = await DriveFileAccessRepository.distinctFileIds({
+      filters: {
+        project_id: project._id,
+        user_id: user._id,
+        can_view: true,
+        deleted_on: 0,
+      },
+    });
+    filters.$or = [
+      { created_by: user._id },
+      ...(accessibleFileIds.length > 0 ? [{ _id: { $in: accessibleFileIds } }] : []),
+    ];
+  } else {
     const accessibleFolderIds = await DriveAccessService.listAccessibleFolderIds({
       user,
       project,

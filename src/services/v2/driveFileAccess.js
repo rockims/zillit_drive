@@ -37,11 +37,6 @@ const ROLE_TO_PERMISSIONS = {
 const resolveFilePermission = async ({ user, project, file }) => {
   if (!user || !project || !file) return null;
 
-  // Admin gets full access
-  if (user.admin_access) {
-    return { can_view: true, can_edit: true, can_download: true, can_delete: true };
-  }
-
   // Check explicit file-level access
   const fileAccess = await DriveFileAccessRepository.getAccess({
     filters: {
@@ -321,6 +316,16 @@ const setFileAccessList = async ({ user, project, fileId, entries }) => {
     } catch (err) {
       console.error('[file_access_notification_failed]:', err.message);
     }
+
+    socketClient('__admin_events__', {
+      event: 'drive:file:shared',
+      room: `${project._id.toString()}_room`,
+      data: {
+        project_id: project._id,
+        file,
+        shared_with: newReceiverIds.map((id) => id.toString()),
+      },
+    });
   }
 
   return DriveFileAccessRepository.getAccesses({
