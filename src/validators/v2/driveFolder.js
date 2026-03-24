@@ -34,6 +34,20 @@ const createFolder = Joi.object({
     return err;
   }),
 
+  folder_color: Joi.string().optional().allow('').error((err) => {
+    err[0].message = 'folder_color_validation';
+    return err;
+  }),
+
+  folder_access: Joi.array().items(
+    Joi.object({
+      user_id: Joi.objectId().required(),
+      role: Joi.string().valid('owner', 'editor', 'viewer').required(),
+    })
+  ).optional().default([]),
+
+  inheritToChildren: Joi.boolean().optional().default(false),
+
   attachments: Joi.array().items(attachmentSchema).optional().error((err) => {
     err[0].message = 'attachments_validation';
     return err;

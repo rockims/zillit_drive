@@ -329,7 +329,7 @@ const completeUpload = async ({ user, project, device, params, body }) => {
     // Non-blocking — file is still created even if access seeding fails
   }
 
-  // Send notifications — only to users who have explicit file access (not all drive viewers)
+  // Send notifications to users who have file-level OR folder-level access
   const fileAccessRecords = await DriveFileAccessRepository.getAccesses({
     filters: {
       project_id: project._id,
@@ -339,16 +339,32 @@ const completeUpload = async ({ user, project, device, params, body }) => {
   });
   const accessUserIds = fileAccessRecords
     .map((r) => r.user_id?.toString())
-    .filter((id) => id && id !== file.created_by?.toString()); // exclude uploader (sender)
+    .filter((id) => id && id !== file.created_by?.toString());
+
+  // Also include users with folder-level access (for shared folders)
+  let folderAccessUserIds = [];
+  if (session.folder_id) {
+    const DriveFolderAccess = (await import('zillit-libs/mongo-models-v2/DriveFolderAccess')).default;
+    const folderAccessRecords = await DriveFolderAccess.find({
+      project_id: project._id,
+      folder_id: session.folder_id,
+      deleted_on: 0,
+    }).lean();
+    folderAccessUserIds = folderAccessRecords
+      .map((r) => r.user_id?.toString())
+      .filter((id) => id && id !== file.created_by?.toString());
+  }
+
+  const allReceiverIds = [...new Set([...accessUserIds, ...folderAccessUserIds])];
   const folderId = session.folder_id ? session.folder_id.toString() : null;
-  if (accessUserIds.length === 0) {
+  if (allReceiverIds.length === 0) {
     // No one to notify — skip notification but still emit socket event
   } else {
     await NotificationService.notifyAll(
       {
         project,
         sender: file.created_by,
-        receiver: accessUserIds,
+        receiver: allReceiverIds,
         section: sections.TOOLS,
         tool: DRIVE_TOOL,
         unit: DRIVE_UNIT_FILE,

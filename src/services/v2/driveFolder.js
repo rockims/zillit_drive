@@ -23,7 +23,7 @@ const toIdString = (value) => (value ? value.toString() : null);
 const idsEqual = (valueA, valueB) => toIdString(valueA) === toIdString(valueB);
 
 // Field sanitization — prevents injection of protected fields (project_id, created_by, deleted_on, etc.)
-const FOLDER_ALLOWED_FIELDS = ['folder_name', 'parent_folder_id', 'description'];
+const FOLDER_ALLOWED_FIELDS = ['folder_name', 'parent_folder_id', 'description', 'folder_color'];
 const pickAllowedFields = (body, allowedFields) => {
   const result = {};
   allowedFields.forEach((field) => {
@@ -263,6 +263,21 @@ const createFolder = async ({ user, project, device, body }) => {
     parentFolderId: body.parent_folder_id || null,
   });
 
+  // Grant access to selected users during folder creation (if any)
+  if (body.folder_access && body.folder_access.length > 0) {
+    try {
+      await DriveAccessService.setFolderAccessList({
+        user,
+        project,
+        folder,
+        entries: body.folder_access,
+        replaceExisting: false,
+      });
+    } catch (accessError) {
+      console.error('[driveFolder] Error granting folder access during creation:', accessError.message);
+    }
+  }
+
   socketClient('__admin_events__', {
     event: 'drive:folder:created',
     room: `${project._id.toString()}_room`,
@@ -322,19 +337,17 @@ const getFolders = async ({ user, project, query }) => {
     // they might have access to child folders or files inside.
     // The `accessibleFolderIds` filter below will ensure they only see
     // child folders they actually have access to.
-    if (!user.admin_access) {
-      try {
-        await DriveAccessService.assertFolderAccess({
-          user,
-          project,
-          folder: parentFolder,
-          minRole: 'viewer',
-        });
-      } catch {
-        // User has no parent folder access — that's OK.
-        // They'll only see child folders they explicitly have access to
-        // (enforced by accessibleFolderIds filter below).
-      }
+    try {
+      await DriveAccessService.assertFolderAccess({
+        user,
+        project,
+        folder: parentFolder,
+        minRole: 'viewer',
+      });
+    } catch {
+      // User has no parent folder access — that's OK.
+      // They'll only see child folders they explicitly have access to
+      // (enforced by accessibleFolderIds filter below).
     }
 
     filters.parent_folder_id = query.parent_folder_id;
@@ -347,22 +360,20 @@ const getFolders = async ({ user, project, query }) => {
     project,
   });
 
-  if (accessibleFolderIds !== null) {
-    if (accessibleFolderIds.length === 0) {
-      return pagination.enabled
-        ? {
-            items: [],
-            pagination: {
-              total: 0,
-              limit: pagination.limit,
-              offset: pagination.offset,
-              has_more: false,
-            },
-          }
-        : [];
-    }
-    filters._id = { $in: accessibleFolderIds };
+  if (accessibleFolderIds.length === 0) {
+    return pagination.enabled
+      ? {
+          items: [],
+          pagination: {
+            total: 0,
+            limit: pagination.limit,
+            offset: pagination.offset,
+            has_more: false,
+          },
+        }
+      : [];
   }
+  filters._id = { $in: accessibleFolderIds };
 
   const andFilters = [filters];
 
@@ -545,7 +556,7 @@ const getDriveContents = async ({ user, project, query }) => {
       folder: parentFolder,
       minRole: 'viewer',
     });
-  } else if (!user.admin_access) {
+  } else {
     // Show root files the user created OR has explicit access to
     const accessibleFileIds = await DriveFileAccessRepository.distinctFileIds({
       filters: {
@@ -566,13 +577,7 @@ const getDriveContents = async ({ user, project, query }) => {
     project,
   });
 
-  if (accessibleFolderIds !== null) {
-    if (accessibleFolderIds.length === 0) {
-      folderFilters._id = { $in: [] };
-    } else {
-      folderFilters._id = { $in: accessibleFolderIds };
-    }
-  }
+  folderFilters._id = { $in: accessibleFolderIds };
 
   if (listingQuery.searchRegex) {
     folderFilters.$or = [

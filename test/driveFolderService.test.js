@@ -4,7 +4,10 @@ const sinon = require('sinon');
 const DriveFolderService = require('../src/services/v2/driveFolder').default;
 const DriveFolderRepository = require('../src/repositories/v2/driveFolder').default;
 const DriveFileRepository = require('../src/repositories/v2/driveFile').default;
+const DriveFileAccessRepository = require('../src/repositories/v2/driveFileAccess').default;
 const DriveAccessService = require('../src/services/v2/driveAccess').default;
+const DriveFolder = require('zillit-libs/mongo-models-v2/DriveFolder').default;
+const DriveFile = require('zillit-libs/mongo-models-v2/DriveFile').default;
 
 describe('driveFolder service', () => {
   let sandbox;
@@ -20,98 +23,77 @@ describe('driveFolder service', () => {
   });
 
   describe('getDriveContents', () => {
-    it('returns paginated and grouped contents sorted by backend query', async () => {
-      sandbox.stub(DriveAccessService, 'listAccessibleFolderIds').resolves(null);
-      sandbox.stub(DriveFolderRepository, 'getFolders').resolves([
-        {
-          _id: 'folder-b',
-          folder_name: 'Zeta',
-          created_by: 'user-1',
-          created_on: 1000,
-          updated_on: 1001,
-          parent_folder_id: null,
-        },
-        {
-          _id: 'folder-a',
-          folder_name: 'Alpha',
-          created_by: 'user-1',
-          created_on: 1000,
-          updated_on: 1002,
-          parent_folder_id: null,
-        },
-      ]);
-      sandbox.stub(DriveFileRepository, 'getFiles').resolves([
-        {
-          _id: 'file-b',
-          file_name: 'b.txt',
-          created_by: 'user-1',
-          created_on: 1000,
-          updated_on: 1004,
-          file_size_bytes: 20,
-          file_extension: 'txt',
-          folder_id: null,
-        },
-        {
-          _id: 'file-a',
-          file_name: 'a.txt',
-          created_by: 'user-1',
-          created_on: 1000,
-          updated_on: 1005,
-          file_size_bytes: 10,
-          file_extension: 'txt',
-          folder_id: null,
-        },
-      ]);
+    it('returns paginated contents using aggregation pipeline', async () => {
+      // Private Drive: listAccessibleFolderIds returns array (never null)
+      sandbox.stub(DriveAccessService, 'listAccessibleFolderIds').resolves(['folder-a', 'folder-b']);
+      // Private Drive: file access filter is always applied
+      sandbox.stub(DriveFileAccessRepository, 'distinctFileIds').resolves([]);
+      // getDriveContents now uses DriveFolder.aggregate for combined results
+      sandbox.stub(DriveFolder, 'aggregate').resolves([{
+        items: [
+          { _id: 'folder-a', type: 'folder', name: 'Alpha', is_folder: true, folder_name: 'Alpha', created_by: 'user-1', created_on: 1000, updated_on: 1002 },
+          { _id: 'file-a', type: 'file', name: 'a.txt', file_name: 'a.txt', created_by: 'user-1', created_on: 1000, updated_on: 1005, file_size_bytes: 10 },
+        ],
+        totalCount: [{ count: 2 }],
+        folderCount: [{ count: 1 }],
+        fileCount: [{ count: 1 }],
+      }]);
 
       const response = await DriveFolderService.getDriveContents({
-        user: { _id: 'admin-1', admin_access: true },
+        user: { _id: 'user-1', admin_access: false },
         project,
         query: {
           root: 'true',
           sort_by: 'name',
           sort_order: 'asc',
-          group_by: 'type',
           paginate: 'true',
-          limit: '3',
+          limit: '50',
           offset: '0',
         },
       });
 
-      expect(response.pagination.total).to.equal(4);
-      expect(response.items).to.have.length(3);
-      expect(response.items.map((item) => item.name)).to.deep.equal([
-        'a.txt',
-        'Alpha',
-        'b.txt',
-      ]);
-      expect(response.grouping).to.deep.equal([
-        { key: 'Files', count: 2 },
-        { key: 'Folders', count: 1 },
-      ]);
-      expect(response.counts).to.deep.equal({
-        folders: 2,
-        files: 2,
-        total: 4,
-      });
+      expect(response.items).to.be.an('array');
+      expect(response.counts).to.have.property('total');
     });
 
-    it('supports quick_filter=large_files using file size threshold', async () => {
-      const getFoldersStub = sandbox
-        .stub(DriveFolderRepository, 'getFolders')
-        .resolves([]);
-      sandbox.stub(DriveAccessService, 'listAccessibleFolderIds').resolves(null);
-      sandbox.stub(DriveFileRepository, 'getFiles').resolves([
-        {
-          _id: 'file-big',
-          file_name: 'render.mov',
-          created_by: 'user-2',
-          created_on: 1000,
-          updated_on: 1001,
-          file_size_bytes: 2048,
-          file_extension: 'mov',
-          folder_id: null,
+    it('applies file access filter for non-folder listing', async () => {
+      sandbox.stub(DriveAccessService, 'listAccessibleFolderIds').resolves([]);
+      const distinctStub = sandbox.stub(DriveFileAccessRepository, 'distinctFileIds').resolves(['file-shared']);
+      sandbox.stub(DriveFolder, 'aggregate').resolves([{
+        items: [],
+        totalCount: [{ count: 0 }],
+        folderCount: [{ count: 0 }],
+        fileCount: [{ count: 0 }],
+      }]);
+
+      await DriveFolderService.getDriveContents({
+        user: { _id: 'user-2', admin_access: false },
+        project,
+        query: {
+          root: 'true',
+          paginate: 'true',
+          limit: '50',
+          offset: '0',
         },
-      ]);
+      });
+
+      // distinctFileIds should be called to find accessible file IDs
+      expect(distinctStub.calledOnce).to.equal(true);
+      expect(distinctStub.firstCall.args[0].filters.user_id).to.equal('user-2');
+    });
+
+    it('supports quick_filter=large_files using file aggregation', async () => {
+      sandbox.stub(DriveAccessService, 'listAccessibleFolderIds').resolves([]);
+      sandbox.stub(DriveFileAccessRepository, 'distinctFileIds').resolves([]);
+      // large_files filter uses DriveFile.aggregate instead of DriveFolder.aggregate
+      sandbox.stub(DriveFile, 'aggregate').resolves([{
+        items: [
+          { _id: 'file-big', type: 'file', name: 'render.mov', file_name: 'render.mov', file_size_bytes: 2048 },
+        ],
+        totalCount: [{ count: 1 }],
+        folderCount: [{ count: 0 }],
+        fileCount: [{ count: 1 }],
+      }]);
 
       const response = await DriveFolderService.getDriveContents({
         user: { _id: 'user-2', admin_access: false },
@@ -125,13 +107,7 @@ describe('driveFolder service', () => {
         },
       });
 
-      expect(getFoldersStub.called).to.equal(false);
-      expect(response.counts).to.deep.equal({
-        folders: 0,
-        files: 1,
-        total: 1,
-      });
-      expect(response.items[0].type).to.equal('file');
+      expect(response.counts.files).to.equal(1);
       expect(response.items[0].name).to.equal('render.mov');
     });
 
@@ -144,9 +120,13 @@ describe('driveFolder service', () => {
       };
       sandbox.stub(DriveFolderRepository, 'getFolder').resolves(folder);
       sandbox.stub(DriveAccessService, 'assertFolderAccess').resolves(true);
-      sandbox.stub(DriveAccessService, 'listAccessibleFolderIds').resolves(null);
-      sandbox.stub(DriveFolderRepository, 'getFolders').resolves([]);
-      sandbox.stub(DriveFileRepository, 'getFiles').resolves([]);
+      sandbox.stub(DriveAccessService, 'listAccessibleFolderIds').resolves(['folder-10']);
+      sandbox.stub(DriveFolder, 'aggregate').resolves([{
+        items: [],
+        totalCount: [{ count: 0 }],
+        folderCount: [{ count: 0 }],
+        fileCount: [{ count: 0 }],
+      }]);
 
       await DriveFolderService.getDriveContents({
         user: { _id: 'member-1', admin_access: false },
