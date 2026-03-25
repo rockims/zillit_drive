@@ -516,7 +516,7 @@ const getFiles = async ({ user, project, query }) => {
     files.map(async (file) => {
       const fileObj = typeof file.toObject === 'function' ? file.toObject() : { ...file };
       const permissions = await DriveFileAccessService.resolveFilePermission({ user, project, file });
-      fileObj._userPermissions = permissions || { can_view: false, can_edit: false, can_download: false };
+      fileObj._userPermissions = permissions || { can_view: false, can_edit: false, can_download: false, can_delete: false };
       return fileObj;
     }),
   );
@@ -581,7 +581,7 @@ const getFile = async ({ user, project, params }) => {
   // Attach current user's permissions
   const fileObj = typeof file.toObject === 'function' ? file.toObject() : { ...file };
   const permissions = await DriveFileAccessService.resolveFilePermission({ user, project, file });
-  fileObj._userPermissions = permissions || { can_view: false, can_edit: false, can_download: false };
+  fileObj._userPermissions = permissions || { can_view: false, can_edit: false, can_download: false, can_delete: false };
 
   return fileObj;
 };

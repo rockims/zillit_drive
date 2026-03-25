@@ -37,7 +37,13 @@ const ROLE_TO_PERMISSIONS = {
 const resolveFilePermission = async ({ user, project, file }) => {
   if (!user || !project || !file) return null;
 
-  // Check explicit file-level access
+  // File creator/uploader ALWAYS gets full access (owner) — check first
+  const userId = toIdString(user._id);
+  if (toIdString(file.created_by) === userId || toIdString(file.uploaded_by) === userId) {
+    return { can_view: true, can_edit: true, can_download: true, can_delete: true };
+  }
+
+  // Check explicit file-level access for non-creators
   const fileAccess = await DriveFileAccessRepository.getAccess({
     filters: {
       project_id: project._id,
@@ -54,11 +60,6 @@ const resolveFilePermission = async ({ user, project, file }) => {
       can_download: fileAccess.can_download,
       can_delete: fileAccess.can_delete || false,
     };
-  }
-
-  // File creator always gets full access (they are the owner)
-  if (toIdString(file.created_by) === toIdString(user._id)) {
-    return { can_view: true, can_edit: true, can_download: true, can_delete: true };
   }
 
   // Fall back to folder-level permissions
