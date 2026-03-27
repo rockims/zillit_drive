@@ -1,21 +1,33 @@
 import express from 'express';
+import { rights } from 'zillit-libs/services-v2/permissions';
 
 const router = express.Router();
 
 /**
  * GET /api/v2/drive/project-users
- * Returns list of project members for sharing UI.
- * Uses the ProjectUser model from zillit-libs (same collection the middleware uses).
+ * Returns project members who have Drive viewing rights.
+ * Only users with view_access on 'drive_tool' are returned.
  */
 router.get('/', async (req, res, next) => {
   try {
     const { project, user } = req;
     const ProjectUser = (await import('zillit-libs/mongo-models-v2/ProjectUser')).default;
 
+    // Get user IDs that have Drive viewing rights
+    const usersWithRights = await rights.toolUsersRights({
+      projectId: project._id,
+      identifier: 'drive_tool',
+    });
+    const driveUserIds = usersWithRights
+      .filter((item) => item.view_access)
+      .map((item) => item.user_id.toString());
+
+    // Fetch user details for those with Drive access
     const users = await ProjectUser.find(
       {
         project_id: project._id,
         is_active: true,
+        _id: { $in: driveUserIds },
       },
       {
         _id: 1,
@@ -28,7 +40,7 @@ router.get('/', async (req, res, next) => {
       }
     ).lean();
 
-    // Exclude the current user from the list (can't share with yourself)
+    // Exclude the current user (can't share with yourself)
     const filtered = users.filter(
       (u) => u._id.toString() !== user._id.toString()
     );
