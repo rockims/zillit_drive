@@ -1,3 +1,4 @@
+import ApiResponse from 'zillit-libs/utils/api-response';
 import DriveTagService from '../../services/v2/driveTag.js';
 
 const createTag = async (req, res, next) => {
@@ -7,18 +8,18 @@ const createTag = async (req, res, next) => {
       project: req.project,
       body: req.body,
     });
-    res.json({ status: true, message: 'tag_created', data: tag });
+    return ApiResponse.handleResponse(res, { message: 'tag_created', data: tag });
   } catch (err) {
-    next(err);
+    return ApiResponse.handleError(res, err);
   }
 };
 
 const getTags = async (req, res, next) => {
   try {
     const tags = await DriveTagService.getTags({ project: req.project });
-    res.json({ status: true, data: tags });
+    return ApiResponse.handleResponse(res, { message: 'tags_fetched', data: tags });
   } catch (err) {
-    next(err);
+    return ApiResponse.handleError(res, err);
   }
 };
 
@@ -30,9 +31,9 @@ const updateTag = async (req, res, next) => {
       params: req.params,
       body: req.body,
     });
-    res.json({ status: true, message: 'tag_updated', data: tag });
+    return ApiResponse.handleResponse(res, { message: 'tag_updated', data: tag });
   } catch (err) {
-    next(err);
+    return ApiResponse.handleError(res, err);
   }
 };
 
@@ -43,9 +44,9 @@ const deleteTag = async (req, res, next) => {
       project: req.project,
       params: req.params,
     });
-    res.json({ status: true, ...result });
+    return ApiResponse.handleResponse(res, { message: 'tag_deleted', data: result });
   } catch (err) {
-    next(err);
+    return ApiResponse.handleError(res, err);
   }
 };
 
@@ -56,9 +57,9 @@ const assignTag = async (req, res, next) => {
       project: req.project,
       body: req.body,
     });
-    res.json({ status: true, message: 'tag_assigned', data: result });
+    return ApiResponse.handleResponse(res, { message: 'tag_assigned', data: result });
   } catch (err) {
-    next(err);
+    return ApiResponse.handleError(res, err);
   }
 };
 
@@ -69,9 +70,9 @@ const removeTag = async (req, res, next) => {
       project: req.project,
       body: req.body,
     });
-    res.json({ status: true, ...result });
+    return ApiResponse.handleResponse(res, { message: 'tag_removed', data: result });
   } catch (err) {
-    next(err);
+    return ApiResponse.handleError(res, err);
   }
 };
 
@@ -81,9 +82,9 @@ const getItemTags = async (req, res, next) => {
       project: req.project,
       query: req.query,
     });
-    res.json({ status: true, data: tags });
+    return ApiResponse.handleResponse(res, { message: 'item_tags_fetched', data: tags });
   } catch (err) {
-    next(err);
+    return ApiResponse.handleError(res, err);
   }
 };
 
@@ -93,9 +94,9 @@ const getItemsByTag = async (req, res, next) => {
       project: req.project,
       query: req.query,
     });
-    res.json({ status: true, data: items });
+    return ApiResponse.handleResponse(res, { message: 'items_by_tag_fetched', data: items });
   } catch (err) {
-    next(err);
+    return ApiResponse.handleError(res, err);
   }
 };
 

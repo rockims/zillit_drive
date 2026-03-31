@@ -63,6 +63,11 @@ Thumbs.db
 # Environment File
 .env
 
+# Test files with hardcoded credentials (flagged by GitGuardian)
+test_preview.js
+test_permissions.js
+oo_proxy_test.js
+
 # nyc test coverage
 .nyc_output
 coverage
