@@ -1,3 +1,4 @@
+import mongoose from 'mongoose';
 import DriveFolder from 'zillit-libs/mongo-models-v2/DriveFolder';
 import DriveFolderAccessRepository from '../../repositories/v2/driveFolderAccess.js';
 import DriveFileAccessRepository from '../../repositories/v2/driveFileAccess.js';
@@ -39,7 +40,8 @@ const buildNotificationLevels = async ({ project, folderId, itemId }) => {
   const [current] = await DriveFolder.aggregate([
     {
       $match: {
-        _id: typeof folderId === 'string' ? new (await import('mongoose')).default.Types.ObjectId(folderId) : folderId,
+        _id: typeof folderId === 'string' ? new mongoose.Types.ObjectId(folderId) : folderId,
+        project_id: project._id,
         deleted_on: 0,
       },
     },
