@@ -11,6 +11,7 @@ import DriveFolderRepository from '../../repositories/v2/driveFolder.js';
 import DriveAccessService from './driveAccess.js';
 import DriveFileAccessService from './driveFileAccess.js';
 import DriveActivityService from './driveActivity.js';
+import DriveNotificationReceivers from './driveNotificationReceivers.js';
 import socketClient from '../../config/socketClient.js';
 
 // Field sanitization — prevents injection of protected fields
@@ -311,31 +312,38 @@ const createFile = async ({ user, project, device, body }) => {
     console.error('[file_access_seed_failed]:', err.message);
   }
 
-  const usersIds = await _viewingRightsUsers(project);
-
   const fileFolderId = file.folder_id ? toIdString(file.folder_id) : null;
-  await NotificationService.notifyAll(
-    {
-      project,
-      sender: user._id,
-      receiver: usersIds,
-      section: sections.TOOLS,
-      tool: DRIVE_TOOL,
-      unit: DRIVE_UNIT_FILE,
-      action: 'drive_file_uploaded',
-      reference_id: file._id,
-      level_1: fileFolderId || 'root',
-      level_2: toIdString(file._id),
-      reference_data: {
-        file_id: toIdString(file._id),
-        file_name: file.file_name,
-        folder_id: fileFolderId,
+  const receiverIds = await DriveNotificationReceivers.getFileReceivers({
+    project,
+    actorId: user._id,
+    fileId: file._id,
+    folderId: file.folder_id,
+  });
+
+  if (receiverIds.length > 0) {
+    await NotificationService.notifyAll(
+      {
+        project,
+        sender: user._id,
+        receiver: receiverIds,
+        section: sections.TOOLS,
+        tool: DRIVE_TOOL,
+        unit: DRIVE_UNIT_FILE,
+        action: 'drive_file_uploaded',
+        reference_id: file._id,
+        level_1: fileFolderId || 'root',
+        level_2: toIdString(file._id),
+        reference_data: {
+          file_id: toIdString(file._id),
+          file_name: file.file_name,
+          folder_id: fileFolderId,
+        },
+        message: `New file "${file.file_name}" uploaded`,
       },
-      message: `New file "${file.file_name}" uploaded`,
-    },
-    { notify: true, save: true },
-    socketClient,
-  );
+      { notify: true, save: true },
+      socketClient,
+    );
+  }
 
   socketClient('__admin_events__', {
     event: 'drive:file:added',
@@ -700,31 +708,38 @@ const updateFile = async ({ user, project, device, params, body }) => {
     throw new BadRequest('file_update_failed');
   }
 
-  const usersIds = await _viewingRightsUsers(project);
-
   const updFileFolderId = updatedFile.folder_id ? toIdString(updatedFile.folder_id) : null;
-  await NotificationService.notifyAll(
-    {
-      project,
-      sender: user._id,
-      receiver: usersIds,
-      section: sections.TOOLS,
-      tool: DRIVE_TOOL,
-      unit: DRIVE_UNIT_FILE,
-      action: 'drive_file_updated',
-      reference_id: updatedFile._id,
-      level_1: updFileFolderId || 'root',
-      level_2: toIdString(updatedFile._id),
-      reference_data: {
-        file_id: toIdString(updatedFile._id),
-        file_name: updatedFile.file_name,
-        folder_id: updFileFolderId,
+  const updateReceiverIds = await DriveNotificationReceivers.getFileReceivers({
+    project,
+    actorId: user._id,
+    fileId: updatedFile._id,
+    folderId: updatedFile.folder_id,
+  });
+
+  if (updateReceiverIds.length > 0) {
+    await NotificationService.notifyAll(
+      {
+        project,
+        sender: user._id,
+        receiver: updateReceiverIds,
+        section: sections.TOOLS,
+        tool: DRIVE_TOOL,
+        unit: DRIVE_UNIT_FILE,
+        action: 'drive_file_updated',
+        reference_id: updatedFile._id,
+        level_1: updFileFolderId || 'root',
+        level_2: toIdString(updatedFile._id),
+        reference_data: {
+          file_id: toIdString(updatedFile._id),
+          file_name: updatedFile.file_name,
+          folder_id: updFileFolderId,
+        },
+        message: `File "${updatedFile.file_name}" updated`,
       },
-      message: `File "${updatedFile.file_name}" updated`,
-    },
-    { notify: true, save: true },
-    socketClient,
-  );
+      { notify: true, save: true },
+      socketClient,
+    );
+  }
 
   socketClient('__admin_events__', {
     event: 'drive:file:updated',
@@ -771,31 +786,38 @@ const deleteFile = async ({ user, project, device, params }) => {
 
   await DriveFileRepository.deleteFile({ filters, data: deleteData });
 
-  const usersIds = await _viewingRightsUsers(project);
-
   const delFileFolderId = file.folder_id ? toIdString(file.folder_id) : null;
-  await NotificationService.notifyAll(
-    {
-      project,
-      sender: user._id,
-      receiver: usersIds,
-      section: sections.TOOLS,
-      tool: DRIVE_TOOL,
-      unit: DRIVE_UNIT_FILE,
-      action: 'drive_file_deleted',
-      reference_id: file._id,
-      level_1: delFileFolderId || 'root',
-      level_2: toIdString(file._id),
-      reference_data: {
-        file_id: toIdString(file._id),
-        file_name: file.file_name,
-        folder_id: delFileFolderId,
+  const deleteReceiverIds = await DriveNotificationReceivers.getFileReceivers({
+    project,
+    actorId: user._id,
+    fileId: file._id,
+    folderId: file.folder_id,
+  });
+
+  if (deleteReceiverIds.length > 0) {
+    await NotificationService.notifyAll(
+      {
+        project,
+        sender: user._id,
+        receiver: deleteReceiverIds,
+        section: sections.TOOLS,
+        tool: DRIVE_TOOL,
+        unit: DRIVE_UNIT_FILE,
+        action: 'drive_file_deleted',
+        reference_id: file._id,
+        level_1: delFileFolderId || 'root',
+        level_2: toIdString(file._id),
+        reference_data: {
+          file_id: toIdString(file._id),
+          file_name: file.file_name,
+          folder_id: delFileFolderId,
+        },
+        message: `File "${file.file_name}" deleted`,
       },
-      message: `File "${file.file_name}" deleted`,
-    },
-    { notify: true, save: true },
-    socketClient,
-  );
+      { notify: true, save: true },
+      socketClient,
+    );
+  }
 
   socketClient('__admin_events__', {
     event: 'drive:file:deleted',
@@ -899,32 +921,40 @@ const moveFile = async ({ user, project, device, params, body }) => {
     },
   });
 
-  const usersIds = await _viewingRightsUsers(project);
-
+  const sourceFolderId = file.folder_id ? toIdString(file.folder_id) : null;
   const movedTargetFolderId = target_folder_id || null;
-  await NotificationService.notifyAll(
-    {
-      project,
-      sender: user._id,
-      receiver: usersIds,
-      section: sections.TOOLS,
-      tool: DRIVE_TOOL,
-      unit: DRIVE_UNIT_FILE,
-      action: 'drive_file_moved',
-      reference_id: movedFile._id,
-      level_1: movedTargetFolderId || 'root',
-      level_2: toIdString(movedFile._id),
-      reference_data: {
-        file_id: toIdString(movedFile._id),
-        file_name: movedFile.file_name,
-        folder_id: movedFile.folder_id ? toIdString(movedFile.folder_id) : null,
-        target_folder_id: movedTargetFolderId,
+  const moveReceiverIds = await DriveNotificationReceivers.getMoveReceivers({
+    project,
+    actorId: user._id,
+    sourceFolderId,
+    targetFolderId: movedTargetFolderId,
+  });
+
+  if (moveReceiverIds.length > 0) {
+    await NotificationService.notifyAll(
+      {
+        project,
+        sender: user._id,
+        receiver: moveReceiverIds,
+        section: sections.TOOLS,
+        tool: DRIVE_TOOL,
+        unit: DRIVE_UNIT_FILE,
+        action: 'drive_file_moved',
+        reference_id: movedFile._id,
+        level_1: movedTargetFolderId || 'root',
+        level_2: toIdString(movedFile._id),
+        reference_data: {
+          file_id: toIdString(movedFile._id),
+          file_name: movedFile.file_name,
+          folder_id: movedFile.folder_id ? toIdString(movedFile.folder_id) : null,
+          target_folder_id: movedTargetFolderId,
+        },
+        message: `File "${movedFile.file_name}" moved`,
       },
-      message: `File "${movedFile.file_name}" moved`,
-    },
-    { notify: true, save: true },
-    socketClient,
-  );
+      { notify: true, save: true },
+      socketClient,
+    );
+  }
 
   socketClient('__admin_events__', {
     event: 'drive:file:moved',
