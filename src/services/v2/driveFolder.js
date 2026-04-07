@@ -9,6 +9,7 @@ import DriveFileRepository from '../../repositories/v2/driveFile.js';
 import DriveFileAccessRepository from '../../repositories/v2/driveFileAccess.js';
 import DriveAccessService from './driveAccess.js';
 import DriveActivityService from './driveActivity.js';
+import DriveNotificationReceivers from './driveNotificationReceivers.js';
 import socketClient from '../../config/socketClient.js';
 
 const {
@@ -918,28 +919,45 @@ const updateFolder = async ({ user, project, device, params, body }) => {
     });
   }
 
-  const usersIds = await _viewingRightsUsers(project);
-
-  await NotificationService.notifyAll(
-    {
+  const [folderUpdateReceiverIds, folderUpdateLevels] = await Promise.all([
+    DriveNotificationReceivers.getFolderReceivers({
       project,
-      sender: user._id,
-      receiver: usersIds,
-      section: sections.TOOLS,
-      tool: DRIVE_TOOL,
-      unit: DRIVE_UNIT_FOLDER,
-      action: 'drive_folder_updated',
-      reference_id: updatedFolder._id,
-      reference_data: {
-        folder_id: toIdString(updatedFolder._id),
-        folder_name: updatedFolder.folder_name,
-        parent_folder_id: updatedFolder.parent_folder_id ? toIdString(updatedFolder.parent_folder_id) : null,
+      actorId: user._id,
+      folderId: updatedFolder._id,
+    }),
+    DriveNotificationReceivers.buildNotificationLevels({
+      project,
+      folderId: updatedFolder.parent_folder_id,
+      itemId: updatedFolder._id,
+    }),
+  ]);
+
+  if (folderUpdateReceiverIds.length > 0) {
+    await NotificationService.notifyAll(
+      {
+        project,
+        sender: user._id,
+        receiver: folderUpdateReceiverIds,
+        section: sections.TOOLS,
+        tool: DRIVE_TOOL,
+        unit: DRIVE_UNIT_FOLDER,
+        action: 'drive_folder_updated',
+        reference_id: folderUpdateLevels.reference_id,
+        level_1: folderUpdateLevels.level_1,
+        level_2: folderUpdateLevels.level_2,
+        level_3: folderUpdateLevels.level_3,
+        levels: folderUpdateLevels.levels,
+        reference_data: {
+          folder_id: toIdString(updatedFolder._id),
+          folder_name: updatedFolder.folder_name,
+          parent_folder_id: updatedFolder.parent_folder_id ? toIdString(updatedFolder.parent_folder_id) : null,
+        },
+        message: `Folder "${updatedFolder.folder_name}" updated`,
       },
-      message: `Folder "${updatedFolder.folder_name}" updated`,
-    },
-    { notify: true, save: true },
-    socketClient,
-  );
+      { notify: true, save: true },
+      socketClient,
+    );
+  }
 
   socketClient('__admin_events__', {
     event: 'drive:folder:updated',
@@ -1024,28 +1042,45 @@ const deleteFolder = async ({ user, project, device, params }) => {
     }),
   ]);
 
-  const usersIds = await _viewingRightsUsers(project);
-
-  await NotificationService.notifyAll(
-    {
+  const [folderDeleteReceiverIds, folderDeleteLevels] = await Promise.all([
+    DriveNotificationReceivers.getFolderReceivers({
       project,
-      sender: user._id,
-      receiver: usersIds,
-      section: sections.TOOLS,
-      tool: DRIVE_TOOL,
-      unit: DRIVE_UNIT_FOLDER,
-      action: 'drive_folder_deleted',
-      reference_id: folder._id,
-      reference_data: {
-        folder_id: toIdString(folder._id),
-        folder_name: folder.folder_name,
-        parent_folder_id: folder.parent_folder_id ? toIdString(folder.parent_folder_id) : null,
+      actorId: user._id,
+      folderId: folder._id,
+    }),
+    DriveNotificationReceivers.buildNotificationLevels({
+      project,
+      folderId: folder.parent_folder_id,
+      itemId: folder._id,
+    }),
+  ]);
+
+  if (folderDeleteReceiverIds.length > 0) {
+    await NotificationService.notifyAll(
+      {
+        project,
+        sender: user._id,
+        receiver: folderDeleteReceiverIds,
+        section: sections.TOOLS,
+        tool: DRIVE_TOOL,
+        unit: DRIVE_UNIT_FOLDER,
+        action: 'drive_folder_deleted',
+        reference_id: folderDeleteLevels.reference_id,
+        level_1: folderDeleteLevels.level_1,
+        level_2: folderDeleteLevels.level_2,
+        level_3: folderDeleteLevels.level_3,
+        levels: folderDeleteLevels.levels,
+        reference_data: {
+          folder_id: toIdString(folder._id),
+          folder_name: folder.folder_name,
+          parent_folder_id: folder.parent_folder_id ? toIdString(folder.parent_folder_id) : null,
+        },
+        message: `Folder "${folder.folder_name}" deleted`,
       },
-      message: `Folder "${folder.folder_name}" deleted`,
-    },
-    { notify: true, save: true },
-    socketClient,
-  );
+      { notify: true, save: true },
+      socketClient,
+    );
+  }
 
   socketClient('__admin_events__', {
     event: 'drive:folder:deleted',
