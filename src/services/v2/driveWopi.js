@@ -262,7 +262,7 @@ const putFileContents = async ({ params, query, req }) => {
   DriveActivityService.log({
     projectId: tokenPayload.projectId,
     userId: tokenPayload.userId,
-    action: 'file_edited',
+    action: 'file_updated',
     itemId: fileId,
     itemType: 'file',
     itemName: file.file_name,
