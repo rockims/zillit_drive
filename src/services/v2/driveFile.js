@@ -312,13 +312,19 @@ const createFile = async ({ user, project, device, body }) => {
     console.error('[file_access_seed_failed]:', err.message);
   }
 
-  const fileFolderId = file.folder_id ? toIdString(file.folder_id) : null;
-  const receiverIds = await DriveNotificationReceivers.getFileReceivers({
-    project,
-    actorId: user._id,
-    fileId: file._id,
-    folderId: file.folder_id,
-  });
+  const [receiverIds, notifLevels] = await Promise.all([
+    DriveNotificationReceivers.getFileReceivers({
+      project,
+      actorId: user._id,
+      fileId: file._id,
+      folderId: file.folder_id,
+    }),
+    DriveNotificationReceivers.buildNotificationLevels({
+      project,
+      folderId: file.folder_id,
+      itemId: file._id,
+    }),
+  ]);
 
   if (receiverIds.length > 0) {
     await NotificationService.notifyAll(
@@ -330,13 +336,15 @@ const createFile = async ({ user, project, device, body }) => {
         tool: DRIVE_TOOL,
         unit: DRIVE_UNIT_FILE,
         action: 'drive_file_uploaded',
-        reference_id: file._id,
-        level_1: fileFolderId || 'root',
-        level_2: toIdString(file._id),
+        reference_id: notifLevels.reference_id,
+        level_1: notifLevels.level_1,
+        level_2: notifLevels.level_2,
+        level_3: notifLevels.level_3,
+        levels: notifLevels.levels,
         reference_data: {
           file_id: toIdString(file._id),
           file_name: file.file_name,
-          folder_id: fileFolderId,
+          folder_id: file.folder_id ? toIdString(file.folder_id) : null,
         },
         message: `New file "${file.file_name}" uploaded`,
       },
@@ -708,13 +716,19 @@ const updateFile = async ({ user, project, device, params, body }) => {
     throw new BadRequest('file_update_failed');
   }
 
-  const updFileFolderId = updatedFile.folder_id ? toIdString(updatedFile.folder_id) : null;
-  const updateReceiverIds = await DriveNotificationReceivers.getFileReceivers({
-    project,
-    actorId: user._id,
-    fileId: updatedFile._id,
-    folderId: updatedFile.folder_id,
-  });
+  const [updateReceiverIds, updateNotifLevels] = await Promise.all([
+    DriveNotificationReceivers.getFileReceivers({
+      project,
+      actorId: user._id,
+      fileId: updatedFile._id,
+      folderId: updatedFile.folder_id,
+    }),
+    DriveNotificationReceivers.buildNotificationLevels({
+      project,
+      folderId: updatedFile.folder_id,
+      itemId: updatedFile._id,
+    }),
+  ]);
 
   if (updateReceiverIds.length > 0) {
     await NotificationService.notifyAll(
@@ -726,13 +740,15 @@ const updateFile = async ({ user, project, device, params, body }) => {
         tool: DRIVE_TOOL,
         unit: DRIVE_UNIT_FILE,
         action: 'drive_file_updated',
-        reference_id: updatedFile._id,
-        level_1: updFileFolderId || 'root',
-        level_2: toIdString(updatedFile._id),
+        reference_id: updateNotifLevels.reference_id,
+        level_1: updateNotifLevels.level_1,
+        level_2: updateNotifLevels.level_2,
+        level_3: updateNotifLevels.level_3,
+        levels: updateNotifLevels.levels,
         reference_data: {
           file_id: toIdString(updatedFile._id),
           file_name: updatedFile.file_name,
-          folder_id: updFileFolderId,
+          folder_id: updatedFile.folder_id ? toIdString(updatedFile.folder_id) : null,
         },
         message: `File "${updatedFile.file_name}" updated`,
       },
@@ -786,13 +802,19 @@ const deleteFile = async ({ user, project, device, params }) => {
 
   await DriveFileRepository.deleteFile({ filters, data: deleteData });
 
-  const delFileFolderId = file.folder_id ? toIdString(file.folder_id) : null;
-  const deleteReceiverIds = await DriveNotificationReceivers.getFileReceivers({
-    project,
-    actorId: user._id,
-    fileId: file._id,
-    folderId: file.folder_id,
-  });
+  const [deleteReceiverIds, deleteNotifLevels] = await Promise.all([
+    DriveNotificationReceivers.getFileReceivers({
+      project,
+      actorId: user._id,
+      fileId: file._id,
+      folderId: file.folder_id,
+    }),
+    DriveNotificationReceivers.buildNotificationLevels({
+      project,
+      folderId: file.folder_id,
+      itemId: file._id,
+    }),
+  ]);
 
   if (deleteReceiverIds.length > 0) {
     await NotificationService.notifyAll(
@@ -804,13 +826,15 @@ const deleteFile = async ({ user, project, device, params }) => {
         tool: DRIVE_TOOL,
         unit: DRIVE_UNIT_FILE,
         action: 'drive_file_deleted',
-        reference_id: file._id,
-        level_1: delFileFolderId || 'root',
-        level_2: toIdString(file._id),
+        reference_id: deleteNotifLevels.reference_id,
+        level_1: deleteNotifLevels.level_1,
+        level_2: deleteNotifLevels.level_2,
+        level_3: deleteNotifLevels.level_3,
+        levels: deleteNotifLevels.levels,
         reference_data: {
           file_id: toIdString(file._id),
           file_name: file.file_name,
-          folder_id: delFileFolderId,
+          folder_id: file.folder_id ? toIdString(file.folder_id) : null,
         },
         message: `File "${file.file_name}" deleted`,
       },
@@ -923,12 +947,19 @@ const moveFile = async ({ user, project, device, params, body }) => {
 
   const sourceFolderId = file.folder_id ? toIdString(file.folder_id) : null;
   const movedTargetFolderId = target_folder_id || null;
-  const moveReceiverIds = await DriveNotificationReceivers.getMoveReceivers({
-    project,
-    actorId: user._id,
-    sourceFolderId,
-    targetFolderId: movedTargetFolderId,
-  });
+  const [moveReceiverIds, moveNotifLevels] = await Promise.all([
+    DriveNotificationReceivers.getMoveReceivers({
+      project,
+      actorId: user._id,
+      sourceFolderId,
+      targetFolderId: movedTargetFolderId,
+    }),
+    DriveNotificationReceivers.buildNotificationLevels({
+      project,
+      folderId: movedFile.folder_id,
+      itemId: movedFile._id,
+    }),
+  ]);
 
   if (moveReceiverIds.length > 0) {
     await NotificationService.notifyAll(
@@ -940,9 +971,11 @@ const moveFile = async ({ user, project, device, params, body }) => {
         tool: DRIVE_TOOL,
         unit: DRIVE_UNIT_FILE,
         action: 'drive_file_moved',
-        reference_id: movedFile._id,
-        level_1: movedTargetFolderId || 'root',
-        level_2: toIdString(movedFile._id),
+        reference_id: moveNotifLevels.reference_id,
+        level_1: moveNotifLevels.level_1,
+        level_2: moveNotifLevels.level_2,
+        level_3: moveNotifLevels.level_3,
+        levels: moveNotifLevels.levels,
         reference_data: {
           file_id: toIdString(movedFile._id),
           file_name: movedFile.file_name,
