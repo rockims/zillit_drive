@@ -919,11 +919,18 @@ const updateFolder = async ({ user, project, device, params, body }) => {
     });
   }
 
-  const folderUpdateReceiverIds = await DriveNotificationReceivers.getFolderReceivers({
-    project,
-    actorId: user._id,
-    folderId: updatedFolder._id,
-  });
+  const [folderUpdateReceiverIds, folderUpdateLevels] = await Promise.all([
+    DriveNotificationReceivers.getFolderReceivers({
+      project,
+      actorId: user._id,
+      folderId: updatedFolder._id,
+    }),
+    DriveNotificationReceivers.buildNotificationLevels({
+      project,
+      folderId: updatedFolder.parent_folder_id,
+      itemId: updatedFolder._id,
+    }),
+  ]);
 
   if (folderUpdateReceiverIds.length > 0) {
     await NotificationService.notifyAll(
@@ -935,7 +942,11 @@ const updateFolder = async ({ user, project, device, params, body }) => {
         tool: DRIVE_TOOL,
         unit: DRIVE_UNIT_FOLDER,
         action: 'drive_folder_updated',
-        reference_id: updatedFolder._id,
+        reference_id: folderUpdateLevels.reference_id,
+        level_1: folderUpdateLevels.level_1,
+        level_2: folderUpdateLevels.level_2,
+        level_3: folderUpdateLevels.level_3,
+        levels: folderUpdateLevels.levels,
         reference_data: {
           folder_id: toIdString(updatedFolder._id),
           folder_name: updatedFolder.folder_name,
@@ -1031,11 +1042,18 @@ const deleteFolder = async ({ user, project, device, params }) => {
     }),
   ]);
 
-  const folderDeleteReceiverIds = await DriveNotificationReceivers.getFolderReceivers({
-    project,
-    actorId: user._id,
-    folderId: folder._id,
-  });
+  const [folderDeleteReceiverIds, folderDeleteLevels] = await Promise.all([
+    DriveNotificationReceivers.getFolderReceivers({
+      project,
+      actorId: user._id,
+      folderId: folder._id,
+    }),
+    DriveNotificationReceivers.buildNotificationLevels({
+      project,
+      folderId: folder.parent_folder_id,
+      itemId: folder._id,
+    }),
+  ]);
 
   if (folderDeleteReceiverIds.length > 0) {
     await NotificationService.notifyAll(
@@ -1047,7 +1065,11 @@ const deleteFolder = async ({ user, project, device, params }) => {
         tool: DRIVE_TOOL,
         unit: DRIVE_UNIT_FOLDER,
         action: 'drive_folder_deleted',
-        reference_id: folder._id,
+        reference_id: folderDeleteLevels.reference_id,
+        level_1: folderDeleteLevels.level_1,
+        level_2: folderDeleteLevels.level_2,
+        level_3: folderDeleteLevels.level_3,
+        levels: folderDeleteLevels.levels,
         reference_data: {
           folder_id: toIdString(folder._id),
           folder_name: folder.folder_name,
