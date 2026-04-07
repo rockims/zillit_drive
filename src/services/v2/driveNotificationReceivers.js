@@ -132,7 +132,7 @@ const getFolderReceivers = async ({ project, actorId, folderId }) => {
   });
 
   return accessRecords
-    .map((r) => toIdString(r.user_id))
+    .map((r) => toIdString(r.user_id?._id || r.user_id))
     .filter((id) => id && id !== toIdString(actorId));
 };
 
@@ -152,7 +152,7 @@ const getFileReceivers = async ({ project, actorId, fileId, folderId }) => {
   });
 
   const fileUserIds = fileAccessRecords
-    .map((r) => toIdString(r.user_id))
+    .map((r) => toIdString(r.user_id?._id || r.user_id))
     .filter((id) => id && id !== actorIdStr);
 
   let folderUserIds = [];
@@ -167,7 +167,7 @@ const getFileReceivers = async ({ project, actorId, fileId, folderId }) => {
     });
 
     folderUserIds = folderAccessRecords
-      .map((r) => toIdString(r.user_id))
+      .map((r) => toIdString(r.user_id?._id || r.user_id))
       .filter((id) => id && id !== actorIdStr);
   }
 
