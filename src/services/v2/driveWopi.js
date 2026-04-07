@@ -182,12 +182,8 @@ const putFileContents = async ({ params, query, req }) => {
 
   if (!file) throw new BadRequest('file_not_found');
 
-  // Collect the request body into a buffer
-  const chunks = [];
-  for await (const chunk of req) {
-    chunks.push(chunk);
-  }
-  const fileBuffer = Buffer.concat(chunks);
+  // req.body is already a Buffer (parsed by express.raw middleware in the route)
+  const fileBuffer = req.body;
 
   const { s3Key, bucket, region } = getFileS3Info(file);
   const s3 = getS3Client(region);
@@ -262,7 +258,7 @@ const putFileContents = async ({ params, query, req }) => {
   DriveActivityService.log({
     projectId: tokenPayload.projectId,
     userId: tokenPayload.userId,
-    action: 'file_edited',
+    action: 'file_updated',
     itemId: fileId,
     itemType: 'file',
     itemName: file.file_name,
