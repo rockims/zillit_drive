@@ -7,7 +7,7 @@ import path from 'path';
 import os from 'os';
 import DriveFileRepository from '../../repositories/v2/driveFile.js';
 
-const S3_DEFAULT_REGION = process.env.AWS_REGION || 'ap-south-1';
+const S3_DEFAULT_REGION = process.env.S3_REGION || process.env.AWS_REGION || 'ap-south-1';
 const S3_BUCKET = process.env.S3_BUCKET || process.env.AWS_S3_BUCKET || 'zillit-drive';
 
 const s3ClientCache = {};
