@@ -26,7 +26,7 @@ const pickAllowedFields = (body, allowedFields) => {
 
 /* ───────────── S3 Client (for presigned GET URLs) ───────────── */
 
-const S3_DEFAULT_REGION = process.env.AWS_REGION || 'ap-south-1';
+const S3_DEFAULT_REGION = process.env.S3_REGION || process.env.AWS_REGION || 'ap-south-1';
 const S3_BUCKET = process.env.S3_BUCKET || process.env.AWS_S3_BUCKET || 'zillit-drive';
 const STREAM_URL_EXPIRY_SECONDS = 3600; // 1 hour
 
