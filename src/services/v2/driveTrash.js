@@ -32,29 +32,11 @@ const listTrash = async ({ user, project, query }) => {
     deleted_on: { $gt: 0 },
   };
 
-  // Every user only sees their own trashed items
-  // (items they created OR items they had explicit file/folder access to)
-  const userFileAccessRecords = await DriveFileAccessRepository.getAccesses({
-    filters: { project_id: project._id, user_id: user._id },
-  });
-  const accessibleFileIds = userFileAccessRecords.map((a) => a.file_id);
-
-  baseFileFilter.$or = [
-    { created_by: user._id },
-    { _id: { $in: accessibleFileIds } },
-  ];
-
-  const DriveFolderAccess = (await import('zillit-libs/mongo-models-v2/DriveFolderAccess')).default;
-  const userFolderAccessRecords = await DriveFolderAccess.find({
-    project_id: project._id,
-    user_id: user._id,
-  }).lean();
-  const accessibleFolderIds = userFolderAccessRecords.map((a) => a.folder_id);
-
-  baseFolderFilter.$or = [
-    { created_by: user._id },
-    { _id: { $in: accessibleFolderIds } },
-  ];
+  // Private Drive: each user only sees items THEY created in trash.
+  // This matches emptyTrash scope (created_by = user._id) so emptying
+  // actually removes everything the user sees — no phantom reappearing items.
+  baseFileFilter.created_by = user._id;
+  baseFolderFilter.created_by = user._id;
 
   // Optional search within trash
   if (query?.search) {
