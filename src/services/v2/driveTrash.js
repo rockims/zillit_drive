@@ -292,21 +292,36 @@ const permanentDelete = async ({ user, project, device, params }) => {
     const DriveFile = (await import('zillit-libs/mongo-models-v2/DriveFile')).default;
     const DriveFolder = (await import('zillit-libs/mongo-models-v2/DriveFolder')).default;
     const DriveFolderAccess = (await import('zillit-libs/mongo-models-v2/DriveFolderAccess')).default;
+    const DriveFileAccess = (await import('zillit-libs/mongo-models-v2/DriveFileAccess')).default;
+    const DriveFileVersion = (await import('zillit-libs/mongo-models-v2/DriveFileVersion')).default;
+    const DriveComment = (await import('zillit-libs/mongo-models-v2/DriveComment')).default;
+    const DriveFavorite = (await import('zillit-libs/mongo-models-v2/DriveFavorite')).default;
+    const DriveItemTag = (await import('zillit-libs/mongo-models-v2/DriveItemTag')).default;
+
+    // Get file IDs before deleting (needed for access/version/comment cleanup)
+    const filesToDelete = await DriveFile.find({
+      project_id: project._id,
+      folder_id: { $in: allFolderIds },
+    }).select('_id').lean();
+    const fileIds = filesToDelete.map((f) => f._id);
 
     await Promise.all([
-      DriveFile.deleteMany({
-        project_id: project._id,
-        folder_id: { $in: allFolderIds },
-      }),
-      DriveFolder.deleteMany({
-        project_id: project._id,
-        _id: { $in: allFolderIds },
-      }),
-      DriveFolderAccess.deleteMany({
-        project_id: project._id,
-        folder_id: { $in: allFolderIds },
-      }),
+      // Core records
+      DriveFile.deleteMany({ project_id: project._id, folder_id: { $in: allFolderIds } }),
+      DriveFolder.deleteMany({ project_id: project._id, _id: { $in: allFolderIds } }),
+      // Access records
+      DriveFolderAccess.deleteMany({ project_id: project._id, folder_id: { $in: allFolderIds } }),
+      ...(fileIds.length > 0 ? [
+        DriveFileAccess.deleteMany({ project_id: project._id, file_id: { $in: fileIds } }),
+        DriveFileVersion.deleteMany({ project_id: project._id, file_id: { $in: fileIds } }),
+        DriveComment.deleteMany({ project_id: project._id, file_id: { $in: fileIds } }),
+      ] : []),
+      // Favorites + tags for both files and folders
+      DriveFavorite.deleteMany({ project_id: project._id, item_id: { $in: [...allFolderIds, ...fileIds] } }),
+      DriveItemTag.deleteMany({ project_id: project._id, item_id: { $in: [...allFolderIds, ...fileIds] } }),
     ]);
+
+    // TODO: Delete S3 objects (files + version snapshots) via async job
 
     return { message: 'Folder permanently deleted' };
   }
@@ -326,7 +341,22 @@ const permanentDelete = async ({ user, project, device, params }) => {
   }
 
   const DriveFile = (await import('zillit-libs/mongo-models-v2/DriveFile')).default;
-  await DriveFile.deleteOne({ _id: itemId, project_id: project._id });
+  const DriveFileAccess = (await import('zillit-libs/mongo-models-v2/DriveFileAccess')).default;
+  const DriveFileVersion = (await import('zillit-libs/mongo-models-v2/DriveFileVersion')).default;
+  const DriveComment = (await import('zillit-libs/mongo-models-v2/DriveComment')).default;
+  const DriveFavorite = (await import('zillit-libs/mongo-models-v2/DriveFavorite')).default;
+  const DriveItemTag = (await import('zillit-libs/mongo-models-v2/DriveItemTag')).default;
+
+  await Promise.all([
+    DriveFile.deleteOne({ _id: itemId, project_id: project._id }),
+    DriveFileAccess.deleteMany({ file_id: itemId, project_id: project._id }),
+    DriveFileVersion.deleteMany({ file_id: itemId, project_id: project._id }),
+    DriveComment.deleteMany({ file_id: itemId, project_id: project._id }),
+    DriveFavorite.deleteMany({ item_id: itemId, project_id: project._id }),
+    DriveItemTag.deleteMany({ item_id: itemId, project_id: project._id }),
+  ]);
+
+  // TODO: Delete S3 objects (file + version snapshots) via async job
 
   return { message: 'File permanently deleted' };
 };
@@ -339,20 +369,46 @@ const emptyTrash = async ({ user, project }) => {
   const DriveFile = (await import('zillit-libs/mongo-models-v2/DriveFile')).default;
   const DriveFolder = (await import('zillit-libs/mongo-models-v2/DriveFolder')).default;
   const DriveFolderAccess = (await import('zillit-libs/mongo-models-v2/DriveFolderAccess')).default;
+  const DriveFileAccess = (await import('zillit-libs/mongo-models-v2/DriveFileAccess')).default;
+  const DriveFileVersion = (await import('zillit-libs/mongo-models-v2/DriveFileVersion')).default;
+  const DriveComment = (await import('zillit-libs/mongo-models-v2/DriveComment')).default;
+  const DriveFavorite = (await import('zillit-libs/mongo-models-v2/DriveFavorite')).default;
+  const DriveItemTag = (await import('zillit-libs/mongo-models-v2/DriveItemTag')).default;
 
-  // Only delete items the user created (their own trash)
+  // Get IDs before deleting (needed for related data cleanup)
+  const deletedFiles = await DriveFile.find({
+    project_id: project._id, created_by: user._id, deleted_on: { $gt: 0 },
+  }).select('_id').lean();
+  const deletedFileIds = deletedFiles.map((f) => f._id);
+
   const deletedFolders = await DriveFolderRepository.getFolders({
     filters: { project_id: project._id, created_by: user._id, deleted_on: { $gt: 0 } },
   });
   const deletedFolderIds = deletedFolders.map((f) => f._id);
 
+  const allItemIds = [...deletedFileIds, ...deletedFolderIds];
+
   await Promise.all([
+    // Core records
     DriveFile.deleteMany({ project_id: project._id, created_by: user._id, deleted_on: { $gt: 0 } }),
     DriveFolder.deleteMany({ project_id: project._id, created_by: user._id, deleted_on: { $gt: 0 } }),
+    // Access records (delete ALL access, not just soft-deleted ones)
     ...(deletedFolderIds.length > 0
-      ? [DriveFolderAccess.deleteMany({ project_id: project._id, folder_id: { $in: deletedFolderIds }, deleted_on: { $gt: 0 } })]
+      ? [DriveFolderAccess.deleteMany({ project_id: project._id, folder_id: { $in: deletedFolderIds } })]
       : []),
+    ...(deletedFileIds.length > 0 ? [
+      DriveFileAccess.deleteMany({ project_id: project._id, file_id: { $in: deletedFileIds } }),
+      DriveFileVersion.deleteMany({ project_id: project._id, file_id: { $in: deletedFileIds } }),
+      DriveComment.deleteMany({ project_id: project._id, file_id: { $in: deletedFileIds } }),
+    ] : []),
+    // Favorites + tags for all deleted items
+    ...(allItemIds.length > 0 ? [
+      DriveFavorite.deleteMany({ project_id: project._id, item_id: { $in: allItemIds } }),
+      DriveItemTag.deleteMany({ project_id: project._id, item_id: { $in: allItemIds } }),
+    ] : []),
   ]);
+
+  // TODO: Delete S3 objects via async job
 
   return { message: 'Trash emptied successfully' };
 };
