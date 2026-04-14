@@ -423,6 +423,14 @@ const getFolders = async ({ user, project, query }) => {
       } catch {
         folderObj._userPermissions = { can_view: true, can_edit: false, can_download: false, can_delete: false };
       }
+      // Count how many users have access (for "Shared with N people" display)
+      try {
+        folderObj._accessCount = await DriveFolderAccessRepository.countAccesses({
+          filters: { folder_id: folder._id, project_id: project._id, deleted_on: 0 },
+        });
+      } catch {
+        folderObj._accessCount = 0;
+      }
       return folderObj;
     }),
   );
