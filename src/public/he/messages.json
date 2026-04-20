@@ -94,5 +94,9 @@
   "folder_access_inherited": "הגישה לתיקייה הורשתה לצאצאים בהצלחה.",
   "folder_access_user_id_validation": "מזהה משתמש לא חוקי בנתוני הגישה לתיקייה.",
   "folder_access_role_validation": "תפקיד לא חוקי בנתוני הגישה לתיקייה.",
-  "folder_access_entries_validation": "נתוני רשומות הגישה לתיקייה לא חוקיים."
+  "folder_access_entries_validation": "נתוני רשומות הגישה לתיקייה לא חוקיים.",
+  "drive_file_shared": "קובץ Drive שותף.",
+  "drive_file_shared_message": "{{user_name}} שיתף איתך קובץ Drive.",
+  "drive_folder_shared": "תיקיית Drive שותפה.",
+  "drive_folder_shared_message": "{{user_name}} שיתף איתך תיקיית Drive."
 }

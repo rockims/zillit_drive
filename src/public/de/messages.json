@@ -94,5 +94,9 @@
   "folder_access_inherited": "Ordnerzugriff erfolgreich an untergeordnete Elemente vererbt.",
   "folder_access_user_id_validation": "Ungültige Benutzer-ID in den Ordnerzugriffsdaten.",
   "folder_access_role_validation": "Ungültige Rolle in den Ordnerzugriffsdaten.",
-  "folder_access_entries_validation": "Ungültige Ordnerzugriffsdaten."
+  "folder_access_entries_validation": "Ungültige Ordnerzugriffsdaten.",
+  "drive_file_shared": "Drive-Datei geteilt.",
+  "drive_file_shared_message": "Eine Drive-Datei wurde von {{user_name}} mit Ihnen geteilt.",
+  "drive_folder_shared": "Drive-Ordner geteilt.",
+  "drive_folder_shared_message": "Ein Drive-Ordner wurde von {{user_name}} mit Ihnen geteilt."
 }

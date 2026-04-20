@@ -94,5 +94,9 @@
   "folder_access_inherited": "Mappåtkomst ärvd till underordnade framgångsrikt.",
   "folder_access_user_id_validation": "Ogiltigt användar-ID i mappåtkomstdata.",
   "folder_access_role_validation": "Ogiltig roll i mappåtkomstdata.",
-  "folder_access_entries_validation": "Ogiltiga mappåtkomstposter."
+  "folder_access_entries_validation": "Ogiltiga mappåtkomstposter.",
+  "drive_file_shared": "Drive-fil delad.",
+  "drive_file_shared_message": "En Drive-fil har delats med dig av {{user_name}}.",
+  "drive_folder_shared": "Drive-mapp delad.",
+  "drive_folder_shared_message": "En Drive-mapp har delats med dig av {{user_name}}."
 }

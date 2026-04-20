@@ -94,5 +94,9 @@
   "folder_access_inherited": "Dostęp do folderu został pomyślnie odziedziczony przez elementy podrzędne.",
   "folder_access_user_id_validation": "Nieprawidłowy identyfikator użytkownika w danych dostępu do folderu.",
   "folder_access_role_validation": "Nieprawidłowa rola w danych dostępu do folderu.",
-  "folder_access_entries_validation": "Nieprawidłowe dane wpisów dostępu do folderu."
+  "folder_access_entries_validation": "Nieprawidłowe dane wpisów dostępu do folderu.",
+  "drive_file_shared": "Plik Drive udostępniony.",
+  "drive_file_shared_message": "{{user_name}} udostępnił(a) Tobie plik Drive.",
+  "drive_folder_shared": "Folder Drive udostępniony.",
+  "drive_folder_shared_message": "{{user_name}} udostępnił(a) Tobie folder Drive."
 }

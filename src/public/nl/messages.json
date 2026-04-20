@@ -94,5 +94,9 @@
   "folder_access_inherited": "Maptoegang succesvol overgenomen door onderliggende items.",
   "folder_access_user_id_validation": "Ongeldige gebruikers-ID in maptoegangsgegevens.",
   "folder_access_role_validation": "Ongeldige rol in maptoegangsgegevens.",
-  "folder_access_entries_validation": "Ongeldige maptoegangsgegevens."
+  "folder_access_entries_validation": "Ongeldige maptoegangsgegevens.",
+  "drive_file_shared": "Drive-bestand gedeeld.",
+  "drive_file_shared_message": "Een Drive-bestand is met u gedeeld door {{user_name}}.",
+  "drive_folder_shared": "Drive-map gedeeld.",
+  "drive_folder_shared_message": "Een Drive-map is met u gedeeld door {{user_name}}."
 }
