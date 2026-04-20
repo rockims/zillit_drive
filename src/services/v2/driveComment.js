@@ -1,6 +1,7 @@
 import DriveComment from 'zillit-libs/mongo-models-v2/DriveComment';
 import DriveFileRepository from '../../repositories/v2/driveFile.js';
 import BadRequest from 'zillit-libs/errors/BadRequest';
+import socketClient from '../../config/socketClient.js';
 
 /**
  * DriveCommentService — CRUD for file comments with threading support.
@@ -87,6 +88,17 @@ const addComment = async ({ user, project, body }) => {
     parent_comment_id: parent_comment_id || null,
   });
 
+  socketClient('__admin_events__', {
+    event: 'drive:comment:added',
+    room: `${project._id.toString()}_room`,
+    data: {
+      project_id: project._id,
+      file_id,
+      parent_comment_id: parent_comment_id || null,
+      comment,
+    },
+  });
+
   return comment;
 };
 
@@ -112,6 +124,17 @@ const updateComment = async ({ user, project, params, body }) => {
   comment.text = text.trim();
   comment.updated_on = Date.now();
   await comment.save();
+
+  socketClient('__admin_events__', {
+    event: 'drive:comment:updated',
+    room: `${project._id.toString()}_room`,
+    data: {
+      project_id: project._id,
+      file_id: comment.file_id,
+      parent_comment_id: comment.parent_comment_id,
+      comment,
+    },
+  });
 
   return comment;
 };
@@ -145,6 +168,17 @@ const deleteComment = async ({ user, project, params }) => {
       { $set: { deleted_on: now, updated_on: now } },
     ),
   ]);
+
+  socketClient('__admin_events__', {
+    event: 'drive:comment:deleted',
+    room: `${project._id.toString()}_room`,
+    data: {
+      project_id: project._id,
+      file_id: comment.file_id,
+      parent_comment_id: comment.parent_comment_id,
+      comment_id: commentId,
+    },
+  });
 
   return { message: 'Comment deleted' };
 };
