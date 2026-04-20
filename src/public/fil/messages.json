@@ -94,5 +94,9 @@
   "folder_access_inherited": "Matagumpay na naipamana ang folder access sa mga descendant.",
   "folder_access_user_id_validation": "Hindi wastong user ID sa folder access payload.",
   "folder_access_role_validation": "Hindi wastong role sa folder access payload.",
-  "folder_access_entries_validation": "Hindi wastong folder access entries payload."
+  "folder_access_entries_validation": "Hindi wastong folder access entries payload.",
+  "drive_file_shared": "Ibinahagi ang Drive file.",
+  "drive_file_shared_message": "Ibinahagi sa iyo ni {{user_name}} ang isang Drive file.",
+  "drive_folder_shared": "Ibinahagi ang Drive folder.",
+  "drive_folder_shared_message": "Ibinahagi sa iyo ni {{user_name}} ang isang Drive folder."
 }

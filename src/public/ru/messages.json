@@ -94,5 +94,9 @@
   "folder_access_inherited": "Доступ к папке успешно унаследован потомками.",
   "folder_access_user_id_validation": "Недействительный идентификатор пользователя в данных доступа к папке.",
   "folder_access_role_validation": "Недействительная роль в данных доступа к папке.",
-  "folder_access_entries_validation": "Недействительные данные записей доступа к папке."
+  "folder_access_entries_validation": "Недействительные данные записей доступа к папке.",
+  "drive_file_shared": "Доступ к файлу Drive предоставлен.",
+  "drive_file_shared_message": "{{user_name}} предоставил(а) вам доступ к файлу Drive.",
+  "drive_folder_shared": "Доступ к папке Drive предоставлен.",
+  "drive_folder_shared_message": "{{user_name}} предоставил(а) вам доступ к папке Drive."
 }

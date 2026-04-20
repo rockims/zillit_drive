@@ -94,5 +94,9 @@
   "folder_access_inherited": "Akses folder berhasil diwariskan ke turunan.",
   "folder_access_user_id_validation": "ID pengguna tidak valid dalam data akses folder.",
   "folder_access_role_validation": "Peran tidak valid dalam data akses folder.",
-  "folder_access_entries_validation": "Data entri akses folder tidak valid."
+  "folder_access_entries_validation": "Data entri akses folder tidak valid.",
+  "drive_file_shared": "File Drive dibagikan.",
+  "drive_file_shared_message": "File Drive telah dibagikan kepada Anda oleh {{user_name}}.",
+  "drive_folder_shared": "Folder Drive dibagikan.",
+  "drive_folder_shared_message": "Folder Drive telah dibagikan kepada Anda oleh {{user_name}}."
 }

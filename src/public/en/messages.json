@@ -94,5 +94,9 @@
   "folder_access_inherited": "Folder access inherited to descendants successfully.",
   "folder_access_user_id_validation": "Invalid user id in folder access payload.",
   "folder_access_role_validation": "Invalid role in folder access payload.",
-  "folder_access_entries_validation": "Invalid folder access entries payload."
+  "folder_access_entries_validation": "Invalid folder access entries payload.",
+  "drive_file_shared": "Drive file shared.",
+  "drive_file_shared_message": "A drive file has been shared with you by {{user_name}}.",
+  "drive_folder_shared": "Drive folder shared.",
+  "drive_folder_shared_message": "A drive folder has been shared with you by {{user_name}}."
 }

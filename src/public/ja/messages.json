@@ -94,5 +94,9 @@
   "folder_access_inherited": "フォルダアクセスが子孫に正常に継承されました。",
   "folder_access_user_id_validation": "フォルダアクセスデータのユーザーIDが無効です。",
   "folder_access_role_validation": "フォルダアクセスデータのロールが無効です。",
-  "folder_access_entries_validation": "フォルダアクセスエントリのデータが無効です。"
+  "folder_access_entries_validation": "フォルダアクセスエントリのデータが無効です。",
+  "drive_file_shared": "Driveファイルが共有されました。",
+  "drive_file_shared_message": "{{user_name}}がDriveファイルをあなたと共有しました。",
+  "drive_folder_shared": "Driveフォルダが共有されました。",
+  "drive_folder_shared_message": "{{user_name}}がDriveフォルダをあなたと共有しました。"
 }

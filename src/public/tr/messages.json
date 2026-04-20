@@ -94,5 +94,9 @@
   "folder_access_inherited": "Klasör erişimi alt öğelere başarıyla aktarıldı.",
   "folder_access_user_id_validation": "Klasör erişim verisinde geçersiz kullanıcı kimliği.",
   "folder_access_role_validation": "Klasör erişim verisinde geçersiz rol.",
-  "folder_access_entries_validation": "Geçersiz klasör erişim girişleri verisi."
+  "folder_access_entries_validation": "Geçersiz klasör erişim girişleri verisi.",
+  "drive_file_shared": "Drive dosyası paylaşıldı.",
+  "drive_file_shared_message": "Bir Drive dosyası {{user_name}} tarafından sizinle paylaşıldı.",
+  "drive_folder_shared": "Drive klasörü paylaşıldı.",
+  "drive_folder_shared_message": "Bir Drive klasörü {{user_name}} tarafından sizinle paylaşıldı."
 }
