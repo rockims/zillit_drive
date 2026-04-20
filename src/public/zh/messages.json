@@ -94,5 +94,9 @@
   "folder_access_inherited": "文件夹访问权限已成功继承到子项。",
   "folder_access_user_id_validation": "文件夹访问数据中的用户ID无效。",
   "folder_access_role_validation": "文件夹访问数据中的角色无效。",
-  "folder_access_entries_validation": "文件夹访问条目数据无效。"
+  "folder_access_entries_validation": "文件夹访问条目数据无效。",
+  "drive_file_shared": "Drive文件已共享。",
+  "drive_file_shared_message": "{{user_name}}与您共享了一个Drive文件。",
+  "drive_folder_shared": "Drive文件夹已共享。",
+  "drive_folder_shared_message": "{{user_name}}与您共享了一个Drive文件夹。"
 }

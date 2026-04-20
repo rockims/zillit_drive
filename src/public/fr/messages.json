@@ -94,5 +94,9 @@
   "folder_access_inherited": "Accès au dossier hérité par les descendants avec succès.",
   "folder_access_user_id_validation": "ID utilisateur invalide dans les données d'accès au dossier.",
   "folder_access_role_validation": "Rôle invalide dans les données d'accès au dossier.",
-  "folder_access_entries_validation": "Données d'accès au dossier invalides."
+  "folder_access_entries_validation": "Données d'accès au dossier invalides.",
+  "drive_file_shared": "Fichier Drive partagé.",
+  "drive_file_shared_message": "Un fichier Drive a été partagé avec vous par {{user_name}}.",
+  "drive_folder_shared": "Dossier Drive partagé.",
+  "drive_folder_shared_message": "Un dossier Drive a été partagé avec vous par {{user_name}}."
 }

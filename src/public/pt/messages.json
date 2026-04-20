@@ -94,5 +94,9 @@
   "folder_access_inherited": "Acesso à pasta herdado pelos descendentes com sucesso.",
   "folder_access_user_id_validation": "ID de usuário inválido nos dados de acesso à pasta.",
   "folder_access_role_validation": "Função inválida nos dados de acesso à pasta.",
-  "folder_access_entries_validation": "Dados de entradas de acesso à pasta inválidos."
+  "folder_access_entries_validation": "Dados de entradas de acesso à pasta inválidos.",
+  "drive_file_shared": "Arquivo do Drive compartilhado.",
+  "drive_file_shared_message": "Um arquivo do Drive foi compartilhado com você por {{user_name}}.",
+  "drive_folder_shared": "Pasta do Drive compartilhada.",
+  "drive_folder_shared_message": "Uma pasta do Drive foi compartilhada com você por {{user_name}}."
 }

@@ -94,5 +94,9 @@
   "folder_access_inherited": "تم توريث صلاحيات الوصول إلى المجلد للعناصر الفرعية بنجاح.",
   "folder_access_user_id_validation": "معرّف مستخدم غير صالح في بيانات الوصول إلى المجلد.",
   "folder_access_role_validation": "دور غير صالح في بيانات الوصول إلى المجلد.",
-  "folder_access_entries_validation": "بيانات إدخالات الوصول إلى المجلد غير صالحة."
+  "folder_access_entries_validation": "بيانات إدخالات الوصول إلى المجلد غير صالحة.",
+  "drive_file_shared": "تمت مشاركة ملف Drive.",
+  "drive_file_shared_message": "تمت مشاركة ملف Drive معك بواسطة {{user_name}}.",
+  "drive_folder_shared": "تمت مشاركة مجلد Drive.",
+  "drive_folder_shared_message": "تمت مشاركة مجلد Drive معك بواسطة {{user_name}}."
 }

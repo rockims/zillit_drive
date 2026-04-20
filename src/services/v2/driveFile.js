@@ -533,6 +533,14 @@ const getFiles = async ({ user, project, query }) => {
       const fileObj = typeof file.toObject === 'function' ? file.toObject() : { ...file };
       const permissions = await DriveFileAccessService.resolveFilePermission({ user, project, file });
       fileObj._userPermissions = permissions || { can_view: false, can_edit: false, can_download: false, can_delete: false };
+      // Count how many users have access (for "Shared with N people" display)
+      try {
+        fileObj._accessCount = await DriveFileAccessRepository.countAccesses({
+          filters: { file_id: file._id, project_id: project._id, deleted_on: 0 },
+        });
+      } catch {
+        fileObj._accessCount = 0;
+      }
       return fileObj;
     }),
   );
