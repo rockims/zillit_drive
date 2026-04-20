@@ -7,6 +7,7 @@ import DriveFolderRepository from '../../repositories/v2/driveFolder.js';
 import DriveFolderAccessRepository from '../../repositories/v2/driveFolderAccess.js';
 import DriveFileAccessRepository from '../../repositories/v2/driveFileAccess.js';
 import DriveFileRepository from '../../repositories/v2/driveFile.js';
+import DriveNotificationReceivers from './driveNotificationReceivers.js';
 import {
   hasMinRole,
   pickHigherRole,
@@ -539,7 +540,17 @@ const setFolderAccessList = async ({
     .filter((id) => id !== toIdString(user._id));
 
   if (newReceiverIds.length > 0) {
+    // Build dynamic ancestor-chain levels so shared folders at depth > 1 surface under
+    // their root ancestor (level_1) → ... → the shared folder itself at the deepest level.
+    // Fixes the ZL-* report where level_2/level_3 were always null for child folders.
+    // Wrapped in the existing try/catch so any levels-resolution or FCM failure is logged
+    // and swallowed — the share DB write already succeeded above, API must still return 200.
     try {
+      const shareLevels = await DriveNotificationReceivers.buildNotificationLevels({
+        project,
+        folderId: folder._id,
+        itemId: folder._id,
+      });
       await NotificationService.notifyAll(
         {
           project,
@@ -549,8 +560,11 @@ const setFolderAccessList = async ({
           tool: DRIVE_TOOL,
           unit: DRIVE_UNIT_FOLDER,
           action: 'drive_folder_shared',
-          reference_id: folder._id,
-          level_1: toIdString(folder._id),
+          reference_id: shareLevels.reference_id,
+          level_1: shareLevels.level_1,
+          level_2: shareLevels.level_2,
+          level_3: shareLevels.level_3,
+          levels: shareLevels.levels,
           reference_data: {
             folder_id: toIdString(folder._id),
             folder_name: folder.folder_name,
