@@ -533,13 +533,17 @@ const getFiles = async ({ user, project, query }) => {
       const fileObj = typeof file.toObject === 'function' ? file.toObject() : { ...file };
       const permissions = await DriveFileAccessService.resolveFilePermission({ user, project, file });
       fileObj._userPermissions = permissions || { can_view: false, can_edit: false, can_download: false, can_delete: false };
-      // Count how many users have access (for "Shared with N people" display)
+      // Fetch access entries once → derive both count and user id list
+      // (web/mobile need _accessUserIds to render shared-user avatars instead of "Only You")
       try {
-        fileObj._accessCount = await DriveFileAccessRepository.countAccesses({
+        const accessEntries = await DriveFileAccessRepository.getAccesses({
           filters: { file_id: file._id, project_id: project._id, deleted_on: 0 },
         });
+        fileObj._accessCount = accessEntries.length;
+        fileObj._accessUserIds = accessEntries.map((e) => e.user_id.toString());
       } catch {
         fileObj._accessCount = 0;
+        fileObj._accessUserIds = [];
       }
       return fileObj;
     }),
