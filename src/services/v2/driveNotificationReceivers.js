@@ -11,7 +11,12 @@ const toIdString = (value) => (value ? value.toString() : null);
  *   - level_1 = root ancestor (topmost parent)
  *   - level_2 = second-level folder
  *   - level_3 = third-level folder
- *   - levels = [{ level_4: "id" }, { level_5: "id" }, ...] for depth > 3
+ *   - levels = ["id_at_depth_4", "id_at_depth_5", ...] for depth > 3
+ *     (Plain ObjectId strings — matches NotificationsV2.levels schema type `[String]`.
+ *      Pushing objects like `{ level_4: id }` throws a CastError in mongoose which
+ *      kills the notification save path and blocks the `notification:save` socket
+ *      event — same root cause as ZL-<deep-nesting no-notification bug>. Keep
+ *      items as bare id strings; frontend derives depth from array index.)
  *   - reference_id = the actual item ID (file or folder being acted on)
  *
  * @param {Object} params
@@ -103,7 +108,9 @@ const buildNotificationLevels = async ({ project, folderId, itemId }) => {
     } else if (index === 2) {
       result.level_3 = fId;
     } else {
-      result.levels.push({ [`level_${index + 1}`]: fId });
+      // Push the bare folder id string (matches NotificationsV2 schema `levels: [String]`).
+      // Position in the array encodes depth: levels[0] = level_4, levels[1] = level_5, …
+      result.levels.push(fId);
     }
   });
 
