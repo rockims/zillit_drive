@@ -6,6 +6,7 @@ import NotificationService from 'zillit-libs/services-v2/notification';
 import DriveFileRepository from '../../repositories/v2/driveFile.js';
 import DriveFileAccessRepository from '../../repositories/v2/driveFileAccess.js';
 import DriveAccessService from './driveAccess.js';
+import DriveNotificationReceivers from './driveNotificationReceivers.js';
 import socketClient from '../../config/socketClient.js';
 
 const { sections } = NotificationService.NotificationConstants;
@@ -290,7 +291,15 @@ const setFileAccessList = async ({ user, project, fileId, entries }) => {
     .map((e) => e.user_id);
 
   if (newReceiverIds.length > 0) {
+    // Build ancestor-chain levels from the file's parent folder (level_1 = root, etc.)
+    // Matches the file CRUD paths (update/delete/move) for consistent client-side routing.
+    // Wrapped in try/catch — share DB write already persisted; never let FCM issues 500 the API.
     try {
+      const shareLevels = await DriveNotificationReceivers.buildNotificationLevels({
+        project,
+        folderId: file.folder_id,
+        itemId: file._id,
+      });
       const folderId = file.folder_id ? toIdString(file.folder_id) : null;
       await NotificationService.notifyAll(
         {
@@ -301,9 +310,11 @@ const setFileAccessList = async ({ user, project, fileId, entries }) => {
           tool: DRIVE_TOOL,
           unit: DRIVE_UNIT_FILE,
           action: 'drive_file_shared',
-          reference_id: file._id,
-          level_1: folderId || 'root',
-          level_2: toIdString(file._id),
+          reference_id: shareLevels.reference_id,
+          level_1: shareLevels.level_1,
+          level_2: shareLevels.level_2,
+          level_3: shareLevels.level_3,
+          levels: shareLevels.levels,
           reference_data: {
             file_id: toIdString(file._id),
             file_name: file.file_name,

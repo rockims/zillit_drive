@@ -423,13 +423,22 @@ const getFolders = async ({ user, project, query }) => {
       } catch {
         folderObj._userPermissions = { can_view: true, can_edit: false, can_download: false, can_delete: false };
       }
-      // Count how many users have access (for "Shared with N people" display)
+      // Fetch access entries once → derive both count and user id list
+      // (web/mobile need _accessUserIds to render shared-user avatars instead of "Only You")
+      // DriveFolderAccessRepository.getAccesses does NOT populate today, so e.user_id is an
+      // ObjectId. The `_id` fallback keeps this code correct if the repo ever starts populating
+      // (same defensive pattern as driveFile above).
       try {
-        folderObj._accessCount = await DriveFolderAccessRepository.countAccesses({
+        const accessEntries = await DriveFolderAccessRepository.getAccesses({
           filters: { folder_id: folder._id, project_id: project._id, deleted_on: 0 },
         });
+        folderObj._accessCount = accessEntries.length;
+        folderObj._accessUserIds = accessEntries
+          .map((e) => (e.user_id?._id || e.user_id)?.toString())
+          .filter(Boolean);
       } catch {
         folderObj._accessCount = 0;
+        folderObj._accessUserIds = [];
       }
       return folderObj;
     }),
