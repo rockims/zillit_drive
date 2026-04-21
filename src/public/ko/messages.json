@@ -94,5 +94,9 @@
   "folder_access_inherited": "폴더 액세스가 하위 항목에 성공적으로 상속되었습니다.",
   "folder_access_user_id_validation": "폴더 액세스 데이터의 사용자 ID가 유효하지 않습니다.",
   "folder_access_role_validation": "폴더 액세스 데이터의 역할이 유효하지 않습니다.",
-  "folder_access_entries_validation": "폴더 액세스 항목 데이터가 유효하지 않습니다."
+  "folder_access_entries_validation": "폴더 액세스 항목 데이터가 유효하지 않습니다.",
+  "drive_file_shared": "Drive 파일이 공유되었습니다.",
+  "drive_file_shared_message": "{{user_name}}님이 Drive 파일을 공유했습니다.",
+  "drive_folder_shared": "Drive 폴더가 공유되었습니다.",
+  "drive_folder_shared_message": "{{user_name}}님이 Drive 폴더를 공유했습니다."
 }

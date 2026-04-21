@@ -94,5 +94,9 @@
   "folder_access_inherited": "Akses folder berjaya diwarisi kepada keturunan.",
   "folder_access_user_id_validation": "ID pengguna tidak sah dalam muatan akses folder.",
   "folder_access_role_validation": "Peranan tidak sah dalam muatan akses folder.",
-  "folder_access_entries_validation": "Muatan entri akses folder tidak sah."
+  "folder_access_entries_validation": "Muatan entri akses folder tidak sah.",
+  "drive_file_shared": "Fail Drive dikongsi.",
+  "drive_file_shared_message": "Fail Drive telah dikongsi dengan anda oleh {{user_name}}.",
+  "drive_folder_shared": "Folder Drive dikongsi.",
+  "drive_folder_shared_message": "Folder Drive telah dikongsi dengan anda oleh {{user_name}}."
 }

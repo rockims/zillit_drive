@@ -94,5 +94,9 @@
   "folder_access_inherited": "Mappeadgang nedarvet til underordnede elementer.",
   "folder_access_user_id_validation": "Ugyldigt bruger-ID i mappeadgangsdata.",
   "folder_access_role_validation": "Ugyldig rolle i mappeadgangsdata.",
-  "folder_access_entries_validation": "Ugyldige mappeadgangsdata."
+  "folder_access_entries_validation": "Ugyldige mappeadgangsdata.",
+  "drive_file_shared": "Drive-fil delt.",
+  "drive_file_shared_message": "En Drive-fil er blevet delt med dig af {{user_name}}.",
+  "drive_folder_shared": "Drive-mappe delt.",
+  "drive_folder_shared_message": "En Drive-mappe er blevet delt med dig af {{user_name}}."
 }

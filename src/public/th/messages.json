@@ -94,5 +94,9 @@
   "folder_access_inherited": "สืบทอดการเข้าถึงโฟลเดอร์ไปยังรายการย่อยสำเร็จแล้ว",
   "folder_access_user_id_validation": "ID ผู้ใช้ไม่ถูกต้องในข้อมูลการเข้าถึงโฟลเดอร์",
   "folder_access_role_validation": "บทบาทไม่ถูกต้องในข้อมูลการเข้าถึงโฟลเดอร์",
-  "folder_access_entries_validation": "ข้อมูลรายการเข้าถึงโฟลเดอร์ไม่ถูกต้อง"
+  "folder_access_entries_validation": "ข้อมูลรายการเข้าถึงโฟลเดอร์ไม่ถูกต้อง",
+  "drive_file_shared": "แชร์ไฟล์ Drive แล้ว",
+  "drive_file_shared_message": "{{user_name}} ได้แชร์ไฟล์ Drive กับคุณ",
+  "drive_folder_shared": "แชร์โฟลเดอร์ Drive แล้ว",
+  "drive_folder_shared_message": "{{user_name}} ได้แชร์โฟลเดอร์ Drive กับคุณ"
 }

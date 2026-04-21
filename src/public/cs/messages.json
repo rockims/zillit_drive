@@ -94,5 +94,9 @@
   "folder_access_inherited": "Přístup ke složce byl úspěšně zděděn potomky.",
   "folder_access_user_id_validation": "Neplatné ID uživatele v údajích přístupu ke složce.",
   "folder_access_role_validation": "Neplatná role v údajích přístupu ke složce.",
-  "folder_access_entries_validation": "Neplatné údaje přístupu ke složce."
+  "folder_access_entries_validation": "Neplatné údaje přístupu ke složce.",
+  "drive_file_shared": "Soubor Drive sdílen.",
+  "drive_file_shared_message": "Soubor Drive s vámi sdílel {{user_name}}.",
+  "drive_folder_shared": "Složka Drive sdílena.",
+  "drive_folder_shared_message": "Složku Drive s vámi sdílel {{user_name}}."
 }

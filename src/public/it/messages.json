@@ -94,5 +94,9 @@
   "folder_access_inherited": "Accesso alla cartella ereditato dai discendenti con successo.",
   "folder_access_user_id_validation": "ID utente non valido nei dati di accesso alla cartella.",
   "folder_access_role_validation": "Ruolo non valido nei dati di accesso alla cartella.",
-  "folder_access_entries_validation": "Dati delle voci di accesso alla cartella non validi."
+  "folder_access_entries_validation": "Dati delle voci di accesso alla cartella non validi.",
+  "drive_file_shared": "File Drive condiviso.",
+  "drive_file_shared_message": "Un file Drive è stato condiviso con te da {{user_name}}.",
+  "drive_folder_shared": "Cartella Drive condivisa.",
+  "drive_folder_shared_message": "Una cartella Drive è stata condivisa con te da {{user_name}}."
 }

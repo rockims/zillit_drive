@@ -11,7 +11,14 @@ const toIdString = (value) => (value ? value.toString() : null);
  *   - level_1 = root ancestor (topmost parent)
  *   - level_2 = second-level folder
  *   - level_3 = third-level folder
- *   - levels = [{ level_4: "id" }, { level_5: "id" }, ...] for depth > 3
+ *   - levels = ["level_4:id", "level_5:id", ...] for depth > 3
+ *     (Labeled strings `level_N:id` — self-describing for the client, and still a
+ *      plain-string element so it fits NotificationsV2.levels schema type `[String]`.
+ *      Pushing raw objects like `{ level_4: id }` throws a CastError in mongoose,
+ *      which kills the notification save path and silently drops the
+ *      `notification:save` socket event for any depth > 3 drive event. Label:value
+ *      strings avoid the CastError and give frontends explicit depth info without
+ *      requiring a shared-libs schema change.)
  *   - reference_id = the actual item ID (file or folder being acted on)
  *
  * @param {Object} params
@@ -103,7 +110,10 @@ const buildNotificationLevels = async ({ project, folderId, itemId }) => {
     } else if (index === 2) {
       result.level_3 = fId;
     } else {
-      result.levels.push({ [`level_${index + 1}`]: fId });
+      // Push a labeled string `level_N:id`. Fits NotificationsV2 schema `[String]` and
+      // lets the client parse depth without relying on array-index arithmetic:
+      //   const [label, id] = entry.split(':');   // e.g. 'level_4' + 'abc…'
+      result.levels.push(`level_${index + 1}:${fId}`);
     }
   });
 

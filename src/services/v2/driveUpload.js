@@ -18,6 +18,7 @@ import DriveFolderRepository from '../../repositories/v2/driveFolder.js';
 import DriveFileAccessRepository from '../../repositories/v2/driveFileAccess.js';
 import DriveAccessService from './driveAccess.js';
 import DriveFileAccessService from './driveFileAccess.js';
+import DriveNotificationReceivers from './driveNotificationReceivers.js';
 import DriveUploadSession from 'zillit-libs/mongo-models-v2/DriveUploadSession';
 import DriveThumbnailService from './driveThumbnail.js';
 import socketClient from '../../config/socketClient.js';
@@ -357,31 +358,44 @@ const completeUpload = async ({ user, project, device, params, body }) => {
 
   const allReceiverIds = [...new Set([...accessUserIds, ...folderAccessUserIds])];
   const folderId = session.folder_id ? session.folder_id.toString() : null;
-  if (allReceiverIds.length === 0) {
-    // No one to notify — skip notification but still emit socket event
-  } else {
-    await NotificationService.notifyAll(
-      {
+  if (allReceiverIds.length > 0) {
+    // Build ancestor-chain levels from the file's parent folder — matches the single-shot
+    // createFile path and the file CRUD paths for consistent client routing. Wrapped in
+    // try/catch so FCM/levels failures never 500 a successful multipart upload completion
+    // (the DB file record is already created above this block).
+    try {
+      const uploadLevels = await DriveNotificationReceivers.buildNotificationLevels({
         project,
-        sender: file.created_by,
-        receiver: allReceiverIds,
-        section: sections.TOOLS,
-        tool: DRIVE_TOOL,
-        unit: DRIVE_UNIT_FILE,
-        action: 'drive_file_uploaded',
-        reference_id: file._id,
-        level_1: folderId || 'root',
-        level_2: toIdString(file._id),
-        reference_data: {
-          file_id: toIdString(file._id),
-          file_name: file.file_name,
-          folder_id: folderId,
+        folderId: session.folder_id,
+        itemId: file._id,
+      });
+      await NotificationService.notifyAll(
+        {
+          project,
+          sender: file.created_by,
+          receiver: allReceiverIds,
+          section: sections.TOOLS,
+          tool: DRIVE_TOOL,
+          unit: DRIVE_UNIT_FILE,
+          action: 'drive_file_uploaded',
+          reference_id: uploadLevels.reference_id,
+          level_1: uploadLevels.level_1,
+          level_2: uploadLevels.level_2,
+          level_3: uploadLevels.level_3,
+          levels: uploadLevels.levels,
+          reference_data: {
+            file_id: toIdString(file._id),
+            file_name: file.file_name,
+            folder_id: folderId,
+          },
+          message: `New file "${file.file_name}" uploaded`,
         },
-        message: `New file "${file.file_name}" uploaded`,
-      },
-      { notify: true, save: true },
-      socketClient,
-    );
+        { notify: true, save: true },
+        socketClient,
+      );
+    } catch (notifErr) {
+      console.error('[driveUpload] Upload-complete notification error:', notifErr.message);
+    }
   }
 
   // Emit socket event
