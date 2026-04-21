@@ -4,7 +4,7 @@ import DriveFileVersion from 'zillit-libs/mongo-models-v2/DriveFileVersion';
 import DriveFileRepository from '../../repositories/v2/driveFile.js';
 import BadRequest from 'zillit-libs/errors/BadRequest';
 
-const S3_DEFAULT_REGION = process.env.AWS_REGION || 'ap-south-1';
+const S3_DEFAULT_REGION = process.env.S3_REGION || process.env.AWS_REGION || 'ap-south-1';
 const S3_BUCKET = process.env.S3_BUCKET || process.env.AWS_S3_BUCKET || 'zillit-drive';
 
 const s3ClientCache = {};

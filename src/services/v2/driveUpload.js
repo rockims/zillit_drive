@@ -33,7 +33,7 @@ const DRIVE_UNIT_FILE = 'drive_file_label';
 
 /* ───────────── S3 Client ───────────── */
 
-const S3_DEFAULT_REGION = process.env.AWS_REGION || 'ap-south-1';
+const S3_DEFAULT_REGION = process.env.S3_REGION || process.env.AWS_REGION || 'ap-south-1';
 const S3_BUCKET = process.env.S3_BUCKET || process.env.AWS_S3_BUCKET || 'zillit-bucket-mumbai-dev';
 const S3_REGION = S3_DEFAULT_REGION;
 
