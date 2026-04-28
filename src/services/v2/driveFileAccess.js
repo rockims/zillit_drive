@@ -2,6 +2,7 @@ import Forbidden from 'zillit-libs/errors/Forbidden';
 import BadRequest from 'zillit-libs/errors/BadRequest';
 import { rights } from 'zillit-libs/services-v2/permissions';
 import NotificationService from 'zillit-libs/services-v2/notification';
+import NotificationRepository from 'zillit-libs/repositories-v2/notification';
 
 import DriveFileRepository from '../../repositories/v2/driveFile.js';
 import DriveFileAccessRepository from '../../repositories/v2/driveFileAccess.js';
@@ -301,6 +302,46 @@ const setFileAccessList = async ({ user, project, fileId, entries }) => {
         itemId: file._id,
       });
       const folderId = file.folder_id ? toIdString(file.folder_id) : null;
+
+      // ZL-18486: silently mark prior unread `drive_file_shared` for this file +
+      // these receivers as read, then emit `notification:silent` so connected
+      // clients drop the existing badge before we fire the new share notification.
+      // Mirrors the reports-chat.js _deletePreviousChats pattern.
+      await NotificationRepository.updateNotification({
+        filters: {
+          project_id: project._id,
+          receiver: { $in: newReceiverIds },
+          reference_id: toIdString(file._id),
+          action: 'drive_file_shared',
+          message_read: false,
+        },
+        data: { message_read: true },
+      });
+
+      await NotificationService.notifyAll(
+        {
+          project,
+          sender: user._id,
+          receiver: newReceiverIds,
+          section: sections.TOOLS,
+          tool: DRIVE_TOOL,
+          unit: DRIVE_UNIT_FILE,
+          action: 'drive_file_shared',
+          reference_id: shareLevels.reference_id,
+          level_1: shareLevels.level_1,
+          level_2: shareLevels.level_2,
+          level_3: shareLevels.level_3,
+          levels: shareLevels.levels,
+          reference_data: {
+            file_id: toIdString(file._id),
+            file_name: file.file_name,
+            folder_id: folderId,
+          },
+        },
+        { save: false, silent: true },
+        socketClient,
+      );
+
       await NotificationService.notifyAll(
         {
           project,

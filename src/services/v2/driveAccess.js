@@ -1,6 +1,7 @@
 import mongoose from 'mongoose';
 import Forbidden from 'zillit-libs/errors/Forbidden';
 import NotificationService from 'zillit-libs/services-v2/notification';
+import NotificationRepository from 'zillit-libs/repositories-v2/notification';
 import DriveFolder from 'zillit-libs/mongo-models-v2/DriveFolder';
 
 import DriveFolderRepository from '../../repositories/v2/driveFolder.js';
@@ -551,6 +552,45 @@ const setFolderAccessList = async ({
         folderId: folder._id,
         itemId: folder._id,
       });
+
+      // ZL-18486: silently mark prior unread `drive_folder_shared` for this folder +
+      // these receivers as read, then emit `notification:silent` so connected
+      // clients drop the existing badge before we fire the new share notification.
+      // Mirrors the reports-chat.js _deletePreviousChats pattern.
+      await NotificationRepository.updateNotification({
+        filters: {
+          project_id: project._id,
+          receiver: { $in: newReceiverIds },
+          reference_id: toIdString(folder._id),
+          action: 'drive_folder_shared',
+          message_read: false,
+        },
+        data: { message_read: true },
+      });
+
+      await NotificationService.notifyAll(
+        {
+          project,
+          sender: user._id,
+          receiver: newReceiverIds,
+          section: sections.TOOLS,
+          tool: DRIVE_TOOL,
+          unit: DRIVE_UNIT_FOLDER,
+          action: 'drive_folder_shared',
+          reference_id: shareLevels.reference_id,
+          level_1: shareLevels.level_1,
+          level_2: shareLevels.level_2,
+          level_3: shareLevels.level_3,
+          levels: shareLevels.levels,
+          reference_data: {
+            folder_id: toIdString(folder._id),
+            folder_name: folder.folder_name,
+          },
+        },
+        { save: false, silent: true },
+        socketClient,
+      );
+
       await NotificationService.notifyAll(
         {
           project,
