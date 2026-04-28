@@ -2,6 +2,8 @@ import DriveTag from 'zillit-libs/mongo-models-v2/DriveTag';
 import DriveItemTag from 'zillit-libs/mongo-models-v2/DriveItemTag';
 import BadRequest from 'zillit-libs/errors/BadRequest';
 
+import socketClient from '../../config/socketClient.js';
+
 /**
  * DriveTagService — CRUD for tags and tag assignments.
  */
@@ -28,6 +30,15 @@ const createTag = async ({ user, project, body }) => {
     name,
     color,
     created_by: user._id,
+  });
+
+  socketClient('__admin_events__', {
+    event: 'drive:tag:created',
+    room: `${project._id.toString()}_room`,
+    data: {
+      project_id: project._id,
+      tag,
+    },
   });
 
   return tag;
@@ -71,6 +82,15 @@ const updateTag = async ({ user, project, params, body }) => {
   tag.updated_on = Date.now();
   await tag.save();
 
+  socketClient('__admin_events__', {
+    event: 'drive:tag:updated',
+    room: `${project._id.toString()}_room`,
+    data: {
+      project_id: project._id,
+      tag,
+    },
+  });
+
   return tag;
 };
 
@@ -93,6 +113,15 @@ const deleteTag = async ({ user, project, params }) => {
   await DriveItemTag.deleteMany({
     project_id: project._id,
     tag_id: tagId,
+  });
+
+  socketClient('__admin_events__', {
+    event: 'drive:tag:deleted',
+    room: `${project._id.toString()}_room`,
+    data: {
+      project_id: project._id,
+      tag_id: tagId,
+    },
   });
 
   return { message: 'Tag deleted' };
@@ -132,6 +161,18 @@ const assignTag = async ({ user, project, body }) => {
     { upsert: true, new: true },
   );
 
+  socketClient('__admin_events__', {
+    event: 'drive:tag:assigned',
+    room: `${project._id.toString()}_room`,
+    data: {
+      project_id: project._id,
+      tag_id,
+      item_id,
+      item_type,
+      assignment,
+    },
+  });
+
   return assignment;
 };
 
@@ -146,6 +187,16 @@ const removeTag = async ({ user, project, body }) => {
     project_id: project._id,
     tag_id,
     item_id,
+  });
+
+  socketClient('__admin_events__', {
+    event: 'drive:tag:removed',
+    room: `${project._id.toString()}_room`,
+    data: {
+      project_id: project._id,
+      tag_id,
+      item_id,
+    },
   });
 
   return { message: 'Tag removed from item' };
