@@ -494,8 +494,27 @@ const setFolderAccessList = async ({
     normalizedByUser.set(actorUserId, 'owner');
   }
 
+  let revokedUserIds = [];
+
   if (replaceExisting) {
     const keepUserIds = Array.from(normalizedByUser.keys());
+
+    // ZL-18489: capture user_ids whose access is about to be revoked, so we can
+    // silent-mark their prior unread share notifications as read after the
+    // soft-delete. Without this the FE keeps showing a "shared with you" badge
+    // for an item the user can no longer see/access.
+    const revokedAccessRecords = await DriveFolderAccessRepository.getAccesses({
+      filters: {
+        project_id: project._id,
+        folder_id: folder._id,
+        deleted_on: 0,
+        user_id: { $nin: keepUserIds },
+      },
+    });
+    revokedUserIds = revokedAccessRecords
+      .map((r) => (r.user_id?._id ? r.user_id._id : r.user_id))
+      .filter(Boolean);
+
     await DriveFolderAccessRepository.updateAccesses({
       filters: {
         project_id: project._id,
@@ -554,42 +573,53 @@ const setFolderAccessList = async ({
       });
 
       // ZL-18486: silently mark prior unread `drive_folder_shared` for this folder +
-      // these receivers as read, then emit `notification:silent` so connected
-      // clients drop the existing badge before we fire the new share notification.
-      // Mirrors the reports-chat.js _deletePreviousChats pattern.
-      await NotificationRepository.updateNotification({
-        filters: {
-          project_id: project._id,
-          receiver: { $in: newReceiverIds },
-          reference_id: toIdString(folder._id),
-          action: 'drive_folder_shared',
-          message_read: false,
-        },
-        data: { message_read: true },
+      // these receivers as read, then emit `notification:silent` carrying those
+      // prior notification_uuids in reference_data.read_notification_ids so the
+      // FE badge cache (badgeDB.removeBadgesFromDB at AllBadges.jsx:341-353)
+      // can drop them before we fire the new share notification.
+      const priorShareFilters = {
+        project_id: project._id,
+        receiver: { $in: newReceiverIds },
+        reference_id: toIdString(folder._id),
+        action: 'drive_folder_shared',
+        message_read: false,
+      };
+
+      const priorReadIds = await NotificationRepository.getNotificationIDs({
+        filters: priorShareFilters,
+        field: 'notification_uuid',
       });
 
-      await NotificationService.notifyAll(
-        {
-          project,
-          sender: user._id,
-          receiver: newReceiverIds,
-          section: sections.TOOLS,
-          tool: DRIVE_TOOL,
-          unit: DRIVE_UNIT_FOLDER,
-          action: 'drive_folder_shared',
-          reference_id: shareLevels.reference_id,
-          level_1: shareLevels.level_1,
-          level_2: shareLevels.level_2,
-          level_3: shareLevels.level_3,
-          levels: shareLevels.levels,
-          reference_data: {
-            folder_id: toIdString(folder._id),
-            folder_name: folder.folder_name,
+      if (priorReadIds.length > 0) {
+        await NotificationRepository.updateNotification({
+          filters: priorShareFilters,
+          data: { message_read: true },
+        });
+
+        await NotificationService.notifyAll(
+          {
+            project,
+            sender: user._id,
+            receiver: newReceiverIds,
+            section: sections.TOOLS,
+            tool: DRIVE_TOOL,
+            unit: DRIVE_UNIT_FOLDER,
+            action: 'drive_folder_shared',
+            reference_id: shareLevels.reference_id,
+            level_1: shareLevels.level_1,
+            level_2: shareLevels.level_2,
+            level_3: shareLevels.level_3,
+            levels: shareLevels.levels,
+            reference_data: {
+              folder_id: toIdString(folder._id),
+              folder_name: folder.folder_name,
+              read_notification_ids: priorReadIds.filter(Boolean),
+            },
           },
-        },
-        { save: false, silent: true },
-        socketClient,
-      );
+          { save: false, silent: true },
+          socketClient,
+        );
+      }
 
       await NotificationService.notifyAll(
         {
@@ -627,6 +657,56 @@ const setFolderAccessList = async ({
         shared_with: newReceiverIds,
       },
     });
+  }
+
+  // ZL-18489: for users whose access was just revoked, silent-mark their prior
+  // unread `drive_folder_shared` notifications as read so the badge disappears
+  // along with the access. No save+notify here — the user lost access; we don't
+  // want to add a fresh badge on top.
+  if (revokedUserIds.length > 0) {
+    try {
+      const revokedFilters = {
+        project_id: project._id,
+        receiver: { $in: revokedUserIds },
+        reference_id: toIdString(folder._id),
+        action: 'drive_folder_shared',
+        message_read: false,
+      };
+
+      const revokedReadIds = await NotificationRepository.getNotificationIDs({
+        filters: revokedFilters,
+        field: 'notification_uuid',
+      });
+
+      if (revokedReadIds.length > 0) {
+        await NotificationRepository.updateNotification({
+          filters: revokedFilters,
+          data: { message_read: true },
+        });
+
+        await NotificationService.notifyAll(
+          {
+            project,
+            sender: user._id,
+            receiver: revokedUserIds,
+            section: sections.TOOLS,
+            tool: DRIVE_TOOL,
+            unit: DRIVE_UNIT_FOLDER,
+            action: 'drive_folder_shared',
+            reference_id: toIdString(folder._id),
+            reference_data: {
+              folder_id: toIdString(folder._id),
+              folder_name: folder.folder_name,
+              read_notification_ids: revokedReadIds.filter(Boolean),
+            },
+          },
+          { save: false, silent: true },
+          socketClient,
+        );
+      }
+    } catch (err) {
+      console.error('[folder_access_revoke_silent_failed]:', err.message);
+    }
   }
 
   return getFolderAccessList({
