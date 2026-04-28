@@ -304,43 +304,54 @@ const setFileAccessList = async ({ user, project, fileId, entries }) => {
       const folderId = file.folder_id ? toIdString(file.folder_id) : null;
 
       // ZL-18486: silently mark prior unread `drive_file_shared` for this file +
-      // these receivers as read, then emit `notification:silent` so connected
-      // clients drop the existing badge before we fire the new share notification.
-      // Mirrors the reports-chat.js _deletePreviousChats pattern.
-      await NotificationRepository.updateNotification({
-        filters: {
-          project_id: project._id,
-          receiver: { $in: newReceiverIds },
-          reference_id: toIdString(file._id),
-          action: 'drive_file_shared',
-          message_read: false,
-        },
-        data: { message_read: true },
+      // these receivers as read, then emit `notification:silent` carrying those
+      // prior notification_uuids in reference_data.read_notification_ids so the
+      // FE badge cache (badgeDB.removeBadgesFromDB at AllBadges.jsx:341-353)
+      // can drop them before we fire the new share notification.
+      const priorShareFilters = {
+        project_id: project._id,
+        receiver: { $in: newReceiverIds },
+        reference_id: toIdString(file._id),
+        action: 'drive_file_shared',
+        message_read: false,
+      };
+
+      const priorReadIds = await NotificationRepository.getNotificationIDs({
+        filters: priorShareFilters,
+        field: 'notification_uuid',
       });
 
-      await NotificationService.notifyAll(
-        {
-          project,
-          sender: user._id,
-          receiver: newReceiverIds,
-          section: sections.TOOLS,
-          tool: DRIVE_TOOL,
-          unit: DRIVE_UNIT_FILE,
-          action: 'drive_file_shared',
-          reference_id: shareLevels.reference_id,
-          level_1: shareLevels.level_1,
-          level_2: shareLevels.level_2,
-          level_3: shareLevels.level_3,
-          levels: shareLevels.levels,
-          reference_data: {
-            file_id: toIdString(file._id),
-            file_name: file.file_name,
-            folder_id: folderId,
+      if (priorReadIds.length > 0) {
+        await NotificationRepository.updateNotification({
+          filters: priorShareFilters,
+          data: { message_read: true },
+        });
+
+        await NotificationService.notifyAll(
+          {
+            project,
+            sender: user._id,
+            receiver: newReceiverIds,
+            section: sections.TOOLS,
+            tool: DRIVE_TOOL,
+            unit: DRIVE_UNIT_FILE,
+            action: 'drive_file_shared',
+            reference_id: shareLevels.reference_id,
+            level_1: shareLevels.level_1,
+            level_2: shareLevels.level_2,
+            level_3: shareLevels.level_3,
+            levels: shareLevels.levels,
+            reference_data: {
+              file_id: toIdString(file._id),
+              file_name: file.file_name,
+              folder_id: folderId,
+              read_notification_ids: priorReadIds.filter(Boolean),
+            },
           },
-        },
-        { save: false, silent: true },
-        socketClient,
-      );
+          { save: false, silent: true },
+          socketClient,
+        );
+      }
 
       await NotificationService.notifyAll(
         {
