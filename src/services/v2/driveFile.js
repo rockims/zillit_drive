@@ -908,8 +908,9 @@ const moveFile = async ({ user, project, device, params, body }) => {
     await _assertRootFileWriteAccess({ user, file, project });
   }
 
+  let targetFolder = null;
   if (target_folder_id) {
-    const targetFolder = await _getFolderById({
+    targetFolder = await _getFolderById({
       project,
       folderId: target_folder_id,
     });
@@ -954,6 +955,25 @@ const moveFile = async ({ user, project, device, params, body }) => {
       updated_on: Date.now(),
     },
   });
+
+  // ZL-18478: snapshot the target folder's explicit ACL onto the moved file
+  // so folder members appear in the file's "shared with" list (and stay there
+  // even if the folder ACL changes later). Inheritance via runtime fallback
+  // continues to work too — this just makes the access explicit. Wrapped in
+  // try/catch — the move itself already succeeded above, never let an ACL
+  // snapshot hiccup turn the API call into a failure.
+  if (targetFolder) {
+    try {
+      await DriveFileAccessService.snapshotFolderAccessToFile({
+        project,
+        file: movedFile,
+        folder: targetFolder,
+        actorId: user._id,
+      });
+    } catch (err) {
+      console.error('[moveFile] snapshotFolderAccessToFile failed:', err.message);
+    }
+  }
 
   const sourceFolderId = file.folder_id ? toIdString(file.folder_id) : null;
   const movedTargetFolderId = target_folder_id || null;

@@ -6,6 +6,7 @@ import NotificationRepository from 'zillit-libs/repositories-v2/notification';
 
 import DriveFileRepository from '../../repositories/v2/driveFile.js';
 import DriveFileAccessRepository from '../../repositories/v2/driveFileAccess.js';
+import DriveFolderAccessRepository from '../../repositories/v2/driveFolderAccess.js';
 import DriveAccessService from './driveAccess.js';
 import DriveNotificationReceivers from './driveNotificationReceivers.js';
 import socketClient from '../../config/socketClient.js';
@@ -173,6 +174,98 @@ const seedFileAccess = async ({ project, user, file, entries = [] }) => {
 
   // Root-level files are only accessible to the uploader and explicitly shared users.
   // No auto-grant to all project members — access is controlled via explicit file-level permissions.
+};
+
+/* ───────────── Snapshot Folder ACL onto File ───────────── */
+
+/**
+ * Persist the target folder's explicit ACL onto a file as concrete
+ * DriveFileAccess records. Used after `moveFile` / `bulkMove` so a file
+ * dropped into a shared folder picks up that folder's members in the
+ * file's "shared with" list — not just at the runtime fallback layer
+ * (resolveFilePermission already reads through to the folder, but the
+ * file's access endpoint and any FE that lists per-file ACL won't know
+ * about those users without explicit records).
+ *
+ * Rules:
+ *   - Skip the actor (they're already the owner via seedFileAccess).
+ *   - Skip any user who already has an explicit DriveFileAccess record on
+ *     this file — never downgrade or overwrite a permission that was
+ *     deliberately granted (e.g. coord previously set User B to viewer
+ *     on this file; folder grants editor; we keep B's viewer).
+ *   - Map the folder role to file permissions via ROLE_TO_PERMISSIONS
+ *     (same map runtime fallback uses, so behavior is consistent).
+ *   - No-op when target folder has zero members — e.g. moving to a folder
+ *     no one else has been shared on.
+ *
+ * Called from moveFile / bulkMove. Wrapped in the caller's try/catch so
+ * the move itself never fails because of an ACL snapshot hiccup — the
+ * file is already at its new folder_id, so a missing snapshot just means
+ * inheritance falls back to runtime resolution (the prior behavior).
+ */
+const snapshotFolderAccessToFile = async ({
+  project, file, folder, actorId,
+}) => {
+  if (!folder) return;
+
+  const folderAccesses = await DriveFolderAccessRepository.getAccesses({
+    filters: {
+      project_id: project._id,
+      folder_id: folder._id,
+      deleted_on: 0,
+    },
+  });
+
+  if (!folderAccesses.length) return;
+
+  const actorIdStr = toIdString(actorId);
+  const now = Date.now();
+
+  await Promise.all(folderAccesses.map(async (folderAccess) => {
+    // getAccesses populates user_id, so unwrap the populated subdoc
+    const folderUserId = folderAccess.user_id?._id
+      ? folderAccess.user_id._id
+      : folderAccess.user_id;
+    if (!folderUserId) return;
+
+    if (toIdString(folderUserId) === actorIdStr) return;
+
+    // Don't overwrite an explicit existing record on this file
+    const existing = await DriveFileAccessRepository.getAccess({
+      filters: {
+        project_id: project._id,
+        file_id: file._id,
+        user_id: folderUserId,
+        deleted_on: 0,
+      },
+    });
+    if (existing) return;
+
+    const permissions = ROLE_TO_PERMISSIONS[folderAccess.role]
+      || ROLE_TO_PERMISSIONS.viewer;
+
+    await DriveFileAccessRepository.upsertAccess({
+      filters: {
+        project_id: project._id,
+        file_id: file._id,
+        user_id: folderUserId,
+        deleted_on: 0,
+      },
+      data: {
+        project_id: project._id,
+        file_id: file._id,
+        user_id: folderUserId,
+        can_view: permissions.can_view,
+        can_edit: permissions.can_edit,
+        can_download: permissions.can_download,
+        can_delete: permissions.can_delete,
+        granted_by: actorId,
+        created_on: now,
+        updated_on: now,
+        deleted_on: 0,
+      },
+    });
+  }));
 };
 
 /* ───────────── Get File Access List ───────────── */
@@ -473,6 +566,7 @@ export default {
   resolveFilePermission,
   assertFileAccess,
   seedFileAccess,
+  snapshotFolderAccessToFile,
   getFileAccess,
   setFileAccessList,
 };
