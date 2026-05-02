@@ -18,6 +18,8 @@ router.post('/delete', moduledata, checkAccess, drivePostAccess, DriveBulk.bulkD
 router.post('/move', moduledata, checkAccess, drivePostAccess, DriveBulk.bulkMove);
 
 // Bulk download URLs
+// `/download` is the canonical path used by iOS; `/download-urls` kept for any caller already using it.
+router.post('/download', moduledata, checkAccess, driveViewAccess, DriveBulk.bulkDownloadUrls);
 router.post('/download-urls', moduledata, checkAccess, driveViewAccess, DriveBulk.bulkDownloadUrls);
 
 // Bulk download as ZIP (streams)

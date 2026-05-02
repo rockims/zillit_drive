@@ -145,8 +145,9 @@ const bulkMove = async ({ user, project, device, body }) => {
   }
 
   // Validate target folder if provided
+  let targetFolder = null;
   if (target_folder_id) {
-    const targetFolder = await DriveFolderRepository.getFolder({
+    targetFolder = await DriveFolderRepository.getFolder({
       filters: { _id: target_folder_id, project_id: project._id, deleted_on: 0 },
     });
     if (!targetFolder) {
@@ -203,6 +204,23 @@ const bulkMove = async ({ user, project, device, body }) => {
             updated_on: now,
           },
         });
+
+        // ZL-18478: snapshot the target folder's ACL onto the moved file so
+        // folder members appear in the file's "shared with" list. Wrapped in
+        // try/catch — the move already succeeded, never let an ACL snapshot
+        // hiccup downgrade the result.moved counter. Same helper as moveFile.
+        if (targetFolder) {
+          try {
+            await DriveFileAccessService.snapshotFolderAccessToFile({
+              project,
+              file: { ...file._doc || file, folder_id: target_folder_id },
+              folder: targetFolder,
+              actorId: user._id,
+            });
+          } catch (err) {
+            console.error('[bulkMove] snapshotFolderAccessToFile failed:', err.message);
+          }
+        }
       }
       results.moved++;
     } catch (err) {
