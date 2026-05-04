@@ -27,6 +27,26 @@ const ROLE_TO_PERMISSIONS = {
   viewer: { can_view: true, can_edit: false, can_download: false, can_delete: false },
 };
 
+// ZL-18808: enforce that edit/download/delete depend on view. Edit access
+// without view is incoherent and would let a client (iOS/web/Android)
+// reach the edit/download endpoints (which only check can_edit/can_download)
+// for a user who has no view access. Coerce dependents to false on every
+// write path.
+const normalizePermissions = (entry = {}) => {
+  const canView = entry.can_view !== undefined ? entry.can_view : true;
+  if (!canView) {
+    return {
+      can_view: false, can_edit: false, can_download: false, can_delete: false,
+    };
+  }
+  return {
+    can_view: true,
+    can_edit: entry.can_edit !== undefined ? entry.can_edit : false,
+    can_download: entry.can_download !== undefined ? entry.can_download : true,
+    can_delete: entry.can_delete !== undefined ? entry.can_delete : false,
+  };
+};
+
 /* ───────────── Resolve File Permission ───────────── */
 
 /**
@@ -146,8 +166,9 @@ const seedFileAccess = async ({ project, user, file, entries = [] }) => {
     await Promise.all(
       entries
         .filter((entry) => toIdString(entry.user_id) !== toIdString(user._id))
-        .map((entry) =>
-          DriveFileAccessRepository.upsertAccess({
+        .map((entry) => {
+          const perms = normalizePermissions(entry);
+          return DriveFileAccessRepository.upsertAccess({
             filters: {
               project_id: projectId,
               file_id: fileId,
@@ -158,17 +179,17 @@ const seedFileAccess = async ({ project, user, file, entries = [] }) => {
               project_id: projectId,
               file_id: fileId,
               user_id: entry.user_id,
-              can_view: entry.can_view !== undefined ? entry.can_view : true,
-              can_edit: entry.can_edit !== undefined ? entry.can_edit : false,
-              can_download: entry.can_download !== undefined ? entry.can_download : true,
-              can_delete: entry.can_delete !== undefined ? entry.can_delete : false,
+              can_view: perms.can_view,
+              can_edit: perms.can_edit,
+              can_download: perms.can_download,
+              can_delete: perms.can_delete,
               granted_by: grantedBy,
               created_on: now,
               updated_on: now,
               deleted_on: 0,
             },
-          }),
-        ),
+          });
+        }),
     );
   }
 
@@ -321,10 +342,7 @@ const setFileAccessList = async ({ user, project, fileId, entries }) => {
     if (!userId) return;
     normalizedEntries.set(userId, {
       user_id: entry.user_id,
-      can_view: entry.can_view !== undefined ? entry.can_view : true,
-      can_edit: entry.can_edit !== undefined ? entry.can_edit : false,
-      can_download: entry.can_download !== undefined ? entry.can_download : true,
-      can_delete: entry.can_delete !== undefined ? entry.can_delete : false,
+      ...normalizePermissions(entry),
     });
   });
 
