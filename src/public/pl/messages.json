@@ -98,5 +98,13 @@
   "drive_file_shared": "Plik Drive udostępniony.",
   "drive_file_shared_message": "{{user_name}} udostępnił(a) Tobie plik Drive.",
   "drive_folder_shared": "Folder Drive udostępniony.",
-  "drive_folder_shared_message": "{{user_name}} udostępnił(a) Tobie folder Drive."
+  "drive_folder_shared_message": "{{user_name}} udostępnił(a) Tobie folder Drive.",
+  "drive_file_uploaded": "Plik Drive przesłany.",
+  "drive_file_uploaded_message": "{{user_name}} przesłał(a) plik Drive.",
+  "drive_file_updated": "Plik Drive zaktualizowany.",
+  "drive_file_updated_message": "{{user_name}} zaktualizował(a) plik Drive.",
+  "drive_file_moved": "Plik Drive przeniesiony.",
+  "drive_file_moved_message": "{{user_name}} przeniósł(a) plik Drive.",
+  "drive_folder_updated": "Folder Drive zaktualizowany.",
+  "drive_folder_updated_message": "{{user_name}} zaktualizował(a) folder Drive."
 }

@@ -98,5 +98,13 @@
   "drive_file_shared": "קובץ Drive שותף.",
   "drive_file_shared_message": "{{user_name}} שיתף איתך קובץ Drive.",
   "drive_folder_shared": "תיקיית Drive שותפה.",
-  "drive_folder_shared_message": "{{user_name}} שיתף איתך תיקיית Drive."
+  "drive_folder_shared_message": "{{user_name}} שיתף איתך תיקיית Drive.",
+  "drive_file_uploaded": "קובץ Drive הועלה.",
+  "drive_file_uploaded_message": "{{user_name}} העלה קובץ Drive.",
+  "drive_file_updated": "קובץ Drive עודכן.",
+  "drive_file_updated_message": "{{user_name}} עדכן קובץ Drive.",
+  "drive_file_moved": "קובץ Drive הועבר.",
+  "drive_file_moved_message": "{{user_name}} העביר קובץ Drive.",
+  "drive_folder_updated": "תיקיית Drive עודכנה.",
+  "drive_folder_updated_message": "{{user_name}} עדכן תיקיית Drive."
 }

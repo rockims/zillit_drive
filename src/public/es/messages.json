@@ -98,5 +98,13 @@
   "drive_file_shared": "Archivo de Drive compartido.",
   "drive_file_shared_message": "Un archivo de Drive ha sido compartido contigo por {{user_name}}.",
   "drive_folder_shared": "Carpeta de Drive compartida.",
-  "drive_folder_shared_message": "Una carpeta de Drive ha sido compartida contigo por {{user_name}}."
+  "drive_folder_shared_message": "Una carpeta de Drive ha sido compartida contigo por {{user_name}}.",
+  "drive_file_uploaded": "Archivo de Drive subido.",
+  "drive_file_uploaded_message": "Un archivo de Drive ha sido subido por {{user_name}}.",
+  "drive_file_updated": "Archivo de Drive actualizado.",
+  "drive_file_updated_message": "Un archivo de Drive ha sido actualizado por {{user_name}}.",
+  "drive_file_moved": "Archivo de Drive movido.",
+  "drive_file_moved_message": "Un archivo de Drive ha sido movido por {{user_name}}.",
+  "drive_folder_updated": "Carpeta de Drive actualizada.",
+  "drive_folder_updated_message": "Una carpeta de Drive ha sido actualizada por {{user_name}}."
 }

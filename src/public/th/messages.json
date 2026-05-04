@@ -98,5 +98,13 @@
   "drive_file_shared": "แชร์ไฟล์ Drive แล้ว",
   "drive_file_shared_message": "{{user_name}} ได้แชร์ไฟล์ Drive กับคุณ",
   "drive_folder_shared": "แชร์โฟลเดอร์ Drive แล้ว",
-  "drive_folder_shared_message": "{{user_name}} ได้แชร์โฟลเดอร์ Drive กับคุณ"
+  "drive_folder_shared_message": "{{user_name}} ได้แชร์โฟลเดอร์ Drive กับคุณ",
+  "drive_file_uploaded": "อัปโหลดไฟล์ Drive แล้ว",
+  "drive_file_uploaded_message": "{{user_name}} ได้อัปโหลดไฟล์ Drive",
+  "drive_file_updated": "อัปเดตไฟล์ Drive แล้ว",
+  "drive_file_updated_message": "{{user_name}} ได้อัปเดตไฟล์ Drive",
+  "drive_file_moved": "ย้ายไฟล์ Drive แล้ว",
+  "drive_file_moved_message": "{{user_name}} ได้ย้ายไฟล์ Drive",
+  "drive_folder_updated": "อัปเดตโฟลเดอร์ Drive แล้ว",
+  "drive_folder_updated_message": "{{user_name}} ได้อัปเดตโฟลเดอร์ Drive"
 }
