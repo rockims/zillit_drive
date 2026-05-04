@@ -98,5 +98,13 @@
   "drive_file_shared": "Ibinahagi ang Drive file.",
   "drive_file_shared_message": "Ibinahagi sa iyo ni {{user_name}} ang isang Drive file.",
   "drive_folder_shared": "Ibinahagi ang Drive folder.",
-  "drive_folder_shared_message": "Ibinahagi sa iyo ni {{user_name}} ang isang Drive folder."
+  "drive_folder_shared_message": "Ibinahagi sa iyo ni {{user_name}} ang isang Drive folder.",
+  "drive_file_uploaded": "Na-upload ang Drive file.",
+  "drive_file_uploaded_message": "Na-upload ni {{user_name}} ang isang Drive file.",
+  "drive_file_updated": "Na-update ang Drive file.",
+  "drive_file_updated_message": "Na-update ni {{user_name}} ang isang Drive file.",
+  "drive_file_moved": "Inilipat ang Drive file.",
+  "drive_file_moved_message": "Inilipat ni {{user_name}} ang isang Drive file.",
+  "drive_folder_updated": "Na-update ang Drive folder.",
+  "drive_folder_updated_message": "Na-update ni {{user_name}} ang isang Drive folder."
 }

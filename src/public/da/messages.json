@@ -98,5 +98,13 @@
   "drive_file_shared": "Drive-fil delt.",
   "drive_file_shared_message": "En Drive-fil er blevet delt med dig af {{user_name}}.",
   "drive_folder_shared": "Drive-mappe delt.",
-  "drive_folder_shared_message": "En Drive-mappe er blevet delt med dig af {{user_name}}."
+  "drive_folder_shared_message": "En Drive-mappe er blevet delt med dig af {{user_name}}.",
+  "drive_file_uploaded": "Drive-fil uploadet.",
+  "drive_file_uploaded_message": "En Drive-fil er blevet uploadet af {{user_name}}.",
+  "drive_file_updated": "Drive-fil opdateret.",
+  "drive_file_updated_message": "En Drive-fil er blevet opdateret af {{user_name}}.",
+  "drive_file_moved": "Drive-fil flyttet.",
+  "drive_file_moved_message": "En Drive-fil er blevet flyttet af {{user_name}}.",
+  "drive_folder_updated": "Drive-mappe opdateret.",
+  "drive_folder_updated_message": "En Drive-mappe er blevet opdateret af {{user_name}}."
 }

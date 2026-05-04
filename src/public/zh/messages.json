@@ -98,5 +98,13 @@
   "drive_file_shared": "Drive文件已共享。",
   "drive_file_shared_message": "{{user_name}}与您共享了一个Drive文件。",
   "drive_folder_shared": "Drive文件夹已共享。",
-  "drive_folder_shared_message": "{{user_name}}与您共享了一个Drive文件夹。"
+  "drive_folder_shared_message": "{{user_name}}与您共享了一个Drive文件夹。",
+  "drive_file_uploaded": "Drive文件已上传。",
+  "drive_file_uploaded_message": "{{user_name}}上传了一个Drive文件。",
+  "drive_file_updated": "Drive文件已更新。",
+  "drive_file_updated_message": "{{user_name}}更新了一个Drive文件。",
+  "drive_file_moved": "Drive文件已移动。",
+  "drive_file_moved_message": "{{user_name}}移动了一个Drive文件。",
+  "drive_folder_updated": "Drive文件夹已更新。",
+  "drive_folder_updated_message": "{{user_name}}更新了一个Drive文件夹。"
 }

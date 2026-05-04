@@ -98,5 +98,13 @@
   "drive_file_shared": "Driveファイルが共有されました。",
   "drive_file_shared_message": "{{user_name}}がDriveファイルをあなたと共有しました。",
   "drive_folder_shared": "Driveフォルダが共有されました。",
-  "drive_folder_shared_message": "{{user_name}}がDriveフォルダをあなたと共有しました。"
+  "drive_folder_shared_message": "{{user_name}}がDriveフォルダをあなたと共有しました。",
+  "drive_file_uploaded": "Driveファイルがアップロードされました。",
+  "drive_file_uploaded_message": "{{user_name}}がDriveファイルをアップロードしました。",
+  "drive_file_updated": "Driveファイルが更新されました。",
+  "drive_file_updated_message": "{{user_name}}がDriveファイルを更新しました。",
+  "drive_file_moved": "Driveファイルが移動されました。",
+  "drive_file_moved_message": "{{user_name}}がDriveファイルを移動しました。",
+  "drive_folder_updated": "Driveフォルダが更新されました。",
+  "drive_folder_updated_message": "{{user_name}}がDriveフォルダを更新しました。"
 }

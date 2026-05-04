@@ -98,5 +98,13 @@
   "drive_file_shared": "Soubor Drive sdílen.",
   "drive_file_shared_message": "Soubor Drive s vámi sdílel {{user_name}}.",
   "drive_folder_shared": "Složka Drive sdílena.",
-  "drive_folder_shared_message": "Složku Drive s vámi sdílel {{user_name}}."
+  "drive_folder_shared_message": "Složku Drive s vámi sdílel {{user_name}}.",
+  "drive_file_uploaded": "Soubor Drive nahrán.",
+  "drive_file_uploaded_message": "Soubor Drive nahrál {{user_name}}.",
+  "drive_file_updated": "Soubor Drive aktualizován.",
+  "drive_file_updated_message": "Soubor Drive aktualizoval {{user_name}}.",
+  "drive_file_moved": "Soubor Drive přesunut.",
+  "drive_file_moved_message": "Soubor Drive přesunul {{user_name}}.",
+  "drive_folder_updated": "Složka Drive aktualizována.",
+  "drive_folder_updated_message": "Složku Drive aktualizoval {{user_name}}."
 }
