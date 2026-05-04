@@ -812,47 +812,6 @@ const deleteFile = async ({ user, project, device, params }) => {
 
   await DriveFileRepository.deleteFile({ filters, data: deleteData });
 
-  const [deleteReceiverIds, deleteNotifLevels] = await Promise.all([
-    DriveNotificationReceivers.getFileReceivers({
-      project,
-      actorId: user._id,
-      fileId: file._id,
-      folderId: file.folder_id,
-    }),
-    DriveNotificationReceivers.buildNotificationLevels({
-      project,
-      folderId: file.folder_id,
-      itemId: file._id,
-    }),
-  ]);
-
-  if (deleteReceiverIds.length > 0) {
-    await NotificationService.notifyAll(
-      {
-        project,
-        sender: user._id,
-        receiver: deleteReceiverIds,
-        section: sections.TOOLS,
-        tool: DRIVE_TOOL,
-        unit: DRIVE_UNIT_FILE,
-        action: 'drive_file_deleted',
-        reference_id: deleteNotifLevels.reference_id,
-        level_1: deleteNotifLevels.level_1,
-        level_2: deleteNotifLevels.level_2,
-        level_3: deleteNotifLevels.level_3,
-        levels: deleteNotifLevels.levels,
-        reference_data: {
-          file_id: toIdString(file._id),
-          file_name: file.file_name,
-          folder_id: file.folder_id ? toIdString(file.folder_id) : null,
-        },
-        message: `File "${file.file_name}" deleted`,
-      },
-      { notify: true, save: true },
-      socketClient,
-    );
-  }
-
   socketClient('__admin_events__', {
     event: 'drive:file:deleted',
     room: `${project._id.toString()}_room`,
