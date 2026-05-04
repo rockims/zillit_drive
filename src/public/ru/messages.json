@@ -98,5 +98,13 @@
   "drive_file_shared": "Доступ к файлу Drive предоставлен.",
   "drive_file_shared_message": "{{user_name}} предоставил(а) вам доступ к файлу Drive.",
   "drive_folder_shared": "Доступ к папке Drive предоставлен.",
-  "drive_folder_shared_message": "{{user_name}} предоставил(а) вам доступ к папке Drive."
+  "drive_folder_shared_message": "{{user_name}} предоставил(а) вам доступ к папке Drive.",
+  "drive_file_uploaded": "Файл Drive загружен.",
+  "drive_file_uploaded_message": "{{user_name}} загрузил(а) файл Drive.",
+  "drive_file_updated": "Файл Drive обновлен.",
+  "drive_file_updated_message": "{{user_name}} обновил(а) файл Drive.",
+  "drive_file_moved": "Файл Drive перемещен.",
+  "drive_file_moved_message": "{{user_name}} переместил(а) файл Drive.",
+  "drive_folder_updated": "Папка Drive обновлена.",
+  "drive_folder_updated_message": "{{user_name}} обновил(а) папку Drive."
 }

@@ -98,5 +98,13 @@
   "drive_file_shared": "Drive-Datei geteilt.",
   "drive_file_shared_message": "Eine Drive-Datei wurde von {{user_name}} mit Ihnen geteilt.",
   "drive_folder_shared": "Drive-Ordner geteilt.",
-  "drive_folder_shared_message": "Ein Drive-Ordner wurde von {{user_name}} mit Ihnen geteilt."
+  "drive_folder_shared_message": "Ein Drive-Ordner wurde von {{user_name}} mit Ihnen geteilt.",
+  "drive_file_uploaded": "Drive-Datei hochgeladen.",
+  "drive_file_uploaded_message": "Eine Drive-Datei wurde von {{user_name}} hochgeladen.",
+  "drive_file_updated": "Drive-Datei aktualisiert.",
+  "drive_file_updated_message": "Eine Drive-Datei wurde von {{user_name}} aktualisiert.",
+  "drive_file_moved": "Drive-Datei verschoben.",
+  "drive_file_moved_message": "Eine Drive-Datei wurde von {{user_name}} verschoben.",
+  "drive_folder_updated": "Drive-Ordner aktualisiert.",
+  "drive_folder_updated_message": "Ein Drive-Ordner wurde von {{user_name}} aktualisiert."
 }

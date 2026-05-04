@@ -98,5 +98,13 @@
   "drive_file_shared": "Drive-bestand gedeeld.",
   "drive_file_shared_message": "Een Drive-bestand is met u gedeeld door {{user_name}}.",
   "drive_folder_shared": "Drive-map gedeeld.",
-  "drive_folder_shared_message": "Een Drive-map is met u gedeeld door {{user_name}}."
+  "drive_folder_shared_message": "Een Drive-map is met u gedeeld door {{user_name}}.",
+  "drive_file_uploaded": "Drive-bestand geüpload.",
+  "drive_file_uploaded_message": "Een Drive-bestand is geüpload door {{user_name}}.",
+  "drive_file_updated": "Drive-bestand bijgewerkt.",
+  "drive_file_updated_message": "Een Drive-bestand is bijgewerkt door {{user_name}}.",
+  "drive_file_moved": "Drive-bestand verplaatst.",
+  "drive_file_moved_message": "Een Drive-bestand is verplaatst door {{user_name}}.",
+  "drive_folder_updated": "Drive-map bijgewerkt.",
+  "drive_folder_updated_message": "Een Drive-map is bijgewerkt door {{user_name}}."
 }

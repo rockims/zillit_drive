@@ -98,5 +98,13 @@
   "drive_file_shared": "Drive dosyası paylaşıldı.",
   "drive_file_shared_message": "Bir Drive dosyası {{user_name}} tarafından sizinle paylaşıldı.",
   "drive_folder_shared": "Drive klasörü paylaşıldı.",
-  "drive_folder_shared_message": "Bir Drive klasörü {{user_name}} tarafından sizinle paylaşıldı."
+  "drive_folder_shared_message": "Bir Drive klasörü {{user_name}} tarafından sizinle paylaşıldı.",
+  "drive_file_uploaded": "Drive dosyası yüklendi.",
+  "drive_file_uploaded_message": "Bir Drive dosyası {{user_name}} tarafından yüklendi.",
+  "drive_file_updated": "Drive dosyası güncellendi.",
+  "drive_file_updated_message": "Bir Drive dosyası {{user_name}} tarafından güncellendi.",
+  "drive_file_moved": "Drive dosyası taşındı.",
+  "drive_file_moved_message": "Bir Drive dosyası {{user_name}} tarafından taşındı.",
+  "drive_folder_updated": "Drive klasörü güncellendi.",
+  "drive_folder_updated_message": "Bir Drive klasörü {{user_name}} tarafından güncellendi."
 }
