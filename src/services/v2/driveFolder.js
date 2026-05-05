@@ -10,7 +10,7 @@ import DriveFileAccessRepository from '../../repositories/v2/driveFileAccess.js'
 import DriveAccessService from './driveAccess.js';
 import DriveActivityService from './driveActivity.js';
 import DriveNotificationReceivers from './driveNotificationReceivers.js';
-import socketClient from '../../config/socketClient.js';
+import socketClient, { buildUserRooms } from '../../config/socketClient.js';
 
 const {
   sections, tools, units,
@@ -279,9 +279,32 @@ const createFolder = async ({ user, project, device, body }) => {
     }
   }
 
+  // ZL-18799: emit only to users with access (creator + parent-folder ACL +
+  // any explicit shares set during creation) instead of the project-wide
+  // room. Broadcast was causing folders to appear in unrelated users'
+  // "Shared with Me". Wrapped in try/catch — if receiver resolution fails,
+  // at minimum the creator still gets the event (multi-device sync).
+  let folderEventReceivers = [user._id];
+  try {
+    const [parentReceivers, ownAclReceivers] = await Promise.all([
+      folder.parent_folder_id
+        ? DriveNotificationReceivers.getFolderReceivers({
+          project, actorId: user._id, folderId: folder.parent_folder_id,
+        })
+        : [],
+      DriveNotificationReceivers.getFolderReceivers({
+        project, actorId: user._id, folderId: folder._id,
+      }),
+    ]);
+    folderEventReceivers = [user._id, ...parentReceivers, ...ownAclReceivers];
+  } catch (err) {
+    console.error('[createFolder] receiver resolution failed:', err.message);
+  }
+
   socketClient('__admin_events__', {
     event: 'drive:folder:created',
-    room: `${project._id.toString()}_room`,
+    room: buildUserRooms(folderEventReceivers),
+    except: device._id,
     data: {
       project_id: project._id,
       device_id: device._id,
