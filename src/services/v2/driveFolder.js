@@ -10,7 +10,7 @@ import DriveFileAccessRepository from '../../repositories/v2/driveFileAccess.js'
 import DriveAccessService from './driveAccess.js';
 import DriveActivityService from './driveActivity.js';
 import DriveNotificationReceivers from './driveNotificationReceivers.js';
-import socketClient, { emitToUserRooms } from '../../config/socketClient.js';
+import socketClient, { buildUserRooms } from '../../config/socketClient.js';
 
 const {
   sections, tools, units,
@@ -301,15 +301,17 @@ const createFolder = async ({ user, project, device, body }) => {
     console.error('[createFolder] receiver resolution failed:', err.message);
   }
 
-  emitToUserRooms('__admin_events__', {
+  socketClient('__admin_events__', {
     event: 'drive:folder:created',
+    room: buildUserRooms(folderEventReceivers),
+    except: device._id,
     data: {
       project_id: project._id,
       device_id: device._id,
       parent_folder_id: folder.parent_folder_id ? toIdString(folder.parent_folder_id) : null,
       folder,
     },
-  }, folderEventReceivers);
+  });
 
   // Activity log (fire-and-forget)
   DriveActivityService.log({

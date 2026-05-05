@@ -12,7 +12,7 @@ import DriveAccessService from './driveAccess.js';
 import DriveFileAccessService from './driveFileAccess.js';
 import DriveActivityService from './driveActivity.js';
 import DriveNotificationReceivers from './driveNotificationReceivers.js';
-import socketClient, { emitToUserRooms } from '../../config/socketClient.js';
+import socketClient, { buildUserRooms } from '../../config/socketClient.js';
 
 // Field sanitization — prevents injection of protected fields
 const FILE_ALLOWED_FIELDS = ['file_name', 'folder_id', 'file_path', 'description', 'file_type', 'file_extension', 'file_size', 'file_size_bytes', 'mime_type', 'attachments'];
@@ -355,16 +355,20 @@ const createFile = async ({ user, project, device, body }) => {
 
   // ZL-18799: emit only to users with access (actor + ACL receivers) instead
   // of the project-wide room — broadcast was causing files to appear in
-  // unrelated users' "Shared with Me".
-  emitToUserRooms('__admin_events__', {
+  // unrelated users' "Shared with Me". Socket server accepts room: [...]
+  // and fans out to all listed user-rooms in a single emit (matches the
+  // canonical pattern in zillit_project_managment::permission.js).
+  socketClient('__admin_events__', {
     event: 'drive:file:added',
+    room: buildUserRooms([user._id, ...receiverIds]),
+    except: device._id,
     data: {
       project_id: project._id,
       device_id: device._id,
       folder_id: file.folder_id ? toIdString(file.folder_id) : null,
       file,
     },
-  }, [user._id, ...receiverIds]);
+  });
 
   // Activity log (fire-and-forget)
   DriveActivityService.log({

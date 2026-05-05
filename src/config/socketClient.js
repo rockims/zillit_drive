@@ -16,24 +16,17 @@ const socketClient = (event, data) => {
 };
 
 /**
- * ZL-18799: Fan-out emit to per-user rooms instead of a project-wide room.
- * Use when an event must reach only users with access — e.g. drive new
- * file/folder creates, where project-wide broadcast leaks items into other
- * users' "Shared with Me".
+ * Build a deduped array of user-room strings for use as the socket emit's
+ * `room` field. The socket server accepts `room: [...]` and broadcasts to all
+ * rooms in a single emit (see zillit_project_managment::permission.js for the
+ * canonical pattern). Each user_id (as string) is the room they subscribe to
+ * — same per-user delivery pattern zillit_libs notification service uses.
  *
- * Each user_id (as string) is the room they subscribe to — same per-user room
- * pattern that zillit_libs notification service uses (`room: receiver.toString()`).
- *
- * Auto-dedupes user IDs and skips falsy entries. No-op when userIds is empty.
+ * Filters out falsy IDs and dedupes. Returns empty array if no recipients.
  */
-const emitToUserRooms = (channel, payload, userIds = []) => {
-  const uniqueRooms = Array.from(new Set(
-    (userIds || []).map((id) => (id ? id.toString() : null)).filter(Boolean),
-  ));
-  uniqueRooms.forEach((room) => {
-    socketClient(channel, { ...payload, room });
-  });
-};
+const buildUserRooms = (userIds = []) => Array.from(new Set(
+  (userIds || []).map((id) => (id ? id.toString() : null)).filter(Boolean),
+));
 
 export default socketClient;
-export { emitToUserRooms };
+export { buildUserRooms };

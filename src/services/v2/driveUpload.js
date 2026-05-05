@@ -21,7 +21,7 @@ import DriveFileAccessService from './driveFileAccess.js';
 import DriveNotificationReceivers from './driveNotificationReceivers.js';
 import DriveUploadSession from 'zillit-libs/mongo-models-v2/DriveUploadSession';
 import DriveThumbnailService from './driveThumbnail.js';
-import socketClient, { emitToUserRooms } from '../../config/socketClient.js';
+import socketClient, { buildUserRooms } from '../../config/socketClient.js';
 
 const {
   sections, tools, units,
@@ -400,15 +400,19 @@ const completeUpload = async ({ user, project, device, params, body }) => {
 
   // ZL-18799: emit only to users with access (uploader + ACL receivers).
   // file.created_by is the uploader; allReceiverIds already excludes them.
-  emitToUserRooms('__admin_events__', {
+  // Socket server accepts room: [...] and fans out to all user-rooms in one
+  // emit. `except` skips echoing back to the originating device.
+  socketClient('__admin_events__', {
     event: 'drive:file:added',
+    room: buildUserRooms([file.created_by, ...allReceiverIds]),
+    except: device?._id || null,
     data: {
       project_id: project._id,
       device_id: device?._id || null,
       folder_id: session.folder_id ? session.folder_id.toString() : null,
       file,
     },
-  }, [file.created_by, ...allReceiverIds]);
+  });
 
   // Fire-and-forget: generate video thumbnail if applicable
   DriveThumbnailService.generateVideoThumbnail({
