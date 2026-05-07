@@ -10,7 +10,7 @@ import DriveFileAccessRepository from '../../repositories/v2/driveFileAccess.js'
 import DriveAccessService from './driveAccess.js';
 import DriveActivityService from './driveActivity.js';
 import DriveNotificationReceivers from './driveNotificationReceivers.js';
-import socketClient from '../../config/socketClient.js';
+import socketClient, { buildUserRooms } from '../../config/socketClient.js';
 
 const {
   sections, tools, units,
@@ -225,9 +225,13 @@ const createFolder = async ({ user, project, device, body }) => {
     });
   }
 
+  // ZL-18867: Drive is a Private Drive — duplicate name check must be scoped to
+  // the user's own folders, not the entire project. Without created_by here,
+  // User B couldn't create a folder named "Mirror" if User A already had one.
   const duplicateFilters = {
     project_id: project._id,
     parent_folder_id: body.parent_folder_id || null,
+    created_by: user._id,
     deleted_on: 0,
   };
 
@@ -279,9 +283,32 @@ const createFolder = async ({ user, project, device, body }) => {
     }
   }
 
+  // ZL-18799: emit only to users with access (creator + parent-folder ACL +
+  // any explicit shares set during creation) instead of the project-wide
+  // room. Broadcast was causing folders to appear in unrelated users'
+  // "Shared with Me". Wrapped in try/catch — if receiver resolution fails,
+  // at minimum the creator still gets the event (multi-device sync).
+  let folderEventReceivers = [user._id];
+  try {
+    const [parentReceivers, ownAclReceivers] = await Promise.all([
+      folder.parent_folder_id
+        ? DriveNotificationReceivers.getFolderReceivers({
+          project, actorId: user._id, folderId: folder.parent_folder_id,
+        })
+        : [],
+      DriveNotificationReceivers.getFolderReceivers({
+        project, actorId: user._id, folderId: folder._id,
+      }),
+    ]);
+    folderEventReceivers = [user._id, ...parentReceivers, ...ownAclReceivers];
+  } catch (err) {
+    console.error('[createFolder] receiver resolution failed:', err.message);
+  }
+
   socketClient('__admin_events__', {
     event: 'drive:folder:created',
-    room: `${project._id.toString()}_room`,
+    room: buildUserRooms(folderEventReceivers),
+    except: device._id,
     data: {
       project_id: project._id,
       device_id: device._id,
@@ -878,9 +905,11 @@ const updateFolder = async ({ user, project, device, params, body }) => {
   const nextFolderName = body.folder_name || existingFolder.folder_name;
   const normalizedFolderName = nextFolderName.trim().toLowerCase();
 
+  // ZL-18867: scope duplicate check to the user's own folders (Private Drive).
   const duplicateFilters = {
     project_id: project._id,
     parent_folder_id: requestedParentId || null,
+    created_by: user._id,
     deleted_on: 0,
     _id: { $ne: folderId },
   };
@@ -1280,10 +1309,12 @@ const moveFolder = async ({ user, project, device, params, body }) => {
   }
 
   // 7. Check for duplicate folder name in target
+  // ZL-18867: scope duplicate check to the user's own folders (Private Drive).
   const duplicateFolder = await DriveFolderRepository.getFolder({
     filters: {
       project_id: project._id,
       parent_folder_id: target_folder_id || null,
+      created_by: user._id,
       deleted_on: 0,
       _id: { $ne: folderId },
       folder_name: { $regex: new RegExp(`^${escapeRegex(folder.folder_name.trim())}$`, 'i') },

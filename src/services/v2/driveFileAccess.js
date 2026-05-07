@@ -3,6 +3,7 @@ import BadRequest from 'zillit-libs/errors/BadRequest';
 import { rights } from 'zillit-libs/services-v2/permissions';
 import NotificationService from 'zillit-libs/services-v2/notification';
 import NotificationRepository from 'zillit-libs/repositories-v2/notification';
+import DriveFolder from 'zillit-libs/mongo-models-v2/DriveFolder';
 
 import DriveFileRepository from '../../repositories/v2/driveFile.js';
 import DriveFileAccessRepository from '../../repositories/v2/driveFileAccess.js';
@@ -25,6 +26,26 @@ const ROLE_TO_PERMISSIONS = {
   owner: { can_view: true, can_edit: true, can_download: true, can_delete: true },
   editor: { can_view: true, can_edit: true, can_download: true, can_delete: false },
   viewer: { can_view: true, can_edit: false, can_download: false, can_delete: false },
+};
+
+// ZL-18808: enforce that edit/download/delete depend on view. Edit access
+// without view is incoherent and would let a client (iOS/web/Android)
+// reach the edit/download endpoints (which only check can_edit/can_download)
+// for a user who has no view access. Coerce dependents to false on every
+// write path.
+const normalizePermissions = (entry = {}) => {
+  const canView = entry.can_view !== undefined ? entry.can_view : true;
+  if (!canView) {
+    return {
+      can_view: false, can_edit: false, can_download: false, can_delete: false,
+    };
+  }
+  return {
+    can_view: true,
+    can_edit: entry.can_edit !== undefined ? entry.can_edit : false,
+    can_download: entry.can_download !== undefined ? entry.can_download : true,
+    can_delete: entry.can_delete !== undefined ? entry.can_delete : false,
+  };
 };
 
 /* ───────────── Resolve File Permission ───────────── */
@@ -146,8 +167,9 @@ const seedFileAccess = async ({ project, user, file, entries = [] }) => {
     await Promise.all(
       entries
         .filter((entry) => toIdString(entry.user_id) !== toIdString(user._id))
-        .map((entry) =>
-          DriveFileAccessRepository.upsertAccess({
+        .map((entry) => {
+          const perms = normalizePermissions(entry);
+          return DriveFileAccessRepository.upsertAccess({
             filters: {
               project_id: projectId,
               file_id: fileId,
@@ -158,17 +180,17 @@ const seedFileAccess = async ({ project, user, file, entries = [] }) => {
               project_id: projectId,
               file_id: fileId,
               user_id: entry.user_id,
-              can_view: entry.can_view !== undefined ? entry.can_view : true,
-              can_edit: entry.can_edit !== undefined ? entry.can_edit : false,
-              can_download: entry.can_download !== undefined ? entry.can_download : true,
-              can_delete: entry.can_delete !== undefined ? entry.can_delete : false,
+              can_view: perms.can_view,
+              can_edit: perms.can_edit,
+              can_download: perms.can_download,
+              can_delete: perms.can_delete,
               granted_by: grantedBy,
               created_on: now,
               updated_on: now,
               deleted_on: 0,
             },
-          }),
-        ),
+          });
+        }),
     );
   }
 
@@ -270,6 +292,148 @@ const snapshotFolderAccessToFile = async ({
 
 /* ───────────── Get File Access List ───────────── */
 
+/**
+ * Resolve the ordered ancestor folder chain (closest parent first) for a file.
+ * Returns [parentFolderId, parentOfParent, ...] up to the root, or [] if no parent.
+ * Mirrors the $graphLookup pattern in driveAccess.js::resolveFolderRole so a deep
+ * file at /a/b/c/file.txt picks up grants made at any ancestor level.
+ */
+const _resolveAncestorFolderIds = async ({ project, folder }) => {
+  if (!folder) return [];
+
+  const ordered = [folder._id];
+  if (!folder.parent_folder_id) return ordered;
+
+  const collectionName = DriveFolder.collection.name;
+  const [result] = await DriveFolder.aggregate([
+    { $match: { _id: folder._id, deleted_on: 0 } },
+    {
+      $graphLookup: {
+        from: collectionName,
+        startWith: '$parent_folder_id',
+        connectFromField: 'parent_folder_id',
+        connectToField: '_id',
+        as: 'ancestors',
+        maxDepth: 50,
+        restrictSearchWithMatch: {
+          deleted_on: 0,
+          project_id: project._id,
+        },
+      },
+    },
+    { $project: { ancestors: { _id: 1, parent_folder_id: 1 } } },
+  ]);
+
+  const ancestors = result?.ancestors || [];
+  if (ancestors.length === 0) return ordered;
+
+  const ancestorMap = new Map();
+  ancestors.forEach((a) => ancestorMap.set(toIdString(a._id), a));
+
+  const visited = new Set([toIdString(folder._id)]);
+  let nextParentId = toIdString(folder.parent_folder_id);
+  while (nextParentId && !visited.has(nextParentId)) {
+    visited.add(nextParentId);
+    const ancestor = ancestorMap.get(nextParentId);
+    if (!ancestor) break;
+    ordered.push(ancestor._id);
+    nextParentId = toIdString(ancestor.parent_folder_id);
+  }
+
+  return ordered;
+};
+
+/**
+ * ZL-18804/-18805: project folder-level access records onto a file as
+ * synthesized DriveFileAccess-shaped entries so the access list endpoint
+ * surfaces users who only have access via the parent folder (or any ancestor).
+ *
+ * Rules:
+ *   - Walk file.folder_id and its ancestor chain (closest first).
+ *   - Skip users who already have an explicit DriveFileAccess record on the
+ *     file — explicit always wins.
+ *   - Closer ancestor wins on conflicts (matches resolveFolderRole semantics).
+ *   - Map folder role to file permissions via ROLE_TO_PERMISSIONS.
+ *   - Tag entries with `inherited: true` + `inherited_from_folder_id` so the
+ *     FE can render them differently (e.g. badge "via folder", disable edit
+ *     in the file's share UI; user must edit on the folder instead).
+ */
+const _getInheritedFileAccessFromFolders = async ({ project, file, explicitAccess }) => {
+  if (!file?.folder_id) return [];
+
+  const DriveFolderRepository = (await import('../../repositories/v2/driveFolder.js')).default;
+  const folder = await DriveFolderRepository.getFolder({
+    filters: {
+      _id: file.folder_id,
+      project_id: project._id,
+      deleted_on: 0,
+    },
+  });
+  if (!folder) return [];
+
+  const orderedFolderIds = await _resolveAncestorFolderIds({ project, folder });
+  if (orderedFolderIds.length === 0) return [];
+
+  const folderAccesses = await DriveFolderAccessRepository.getAccesses({
+    filters: {
+      project_id: project._id,
+      folder_id: { $in: orderedFolderIds },
+      deleted_on: 0,
+    },
+  });
+  if (folderAccesses.length === 0) return [];
+
+  const explicitUserIds = new Set(
+    explicitAccess
+      .map((a) => toIdString(a.user_id?._id ? a.user_id._id : a.user_id))
+      .filter(Boolean),
+  );
+
+  // Index folder accesses by folder_id for closest-first resolution
+  const accessesByFolderId = new Map();
+  folderAccesses.forEach((fa) => {
+    const fId = toIdString(fa.folder_id?._id ? fa.folder_id._id : fa.folder_id);
+    if (!fId) return;
+    if (!accessesByFolderId.has(fId)) accessesByFolderId.set(fId, []);
+    accessesByFolderId.get(fId).push(fa);
+  });
+
+  const seenUserIds = new Set();
+  const inheritedEntries = [];
+
+  // Walk closest ancestor first — first hit wins per user
+  for (const folderId of orderedFolderIds) {
+    const accesses = accessesByFolderId.get(toIdString(folderId)) || [];
+    for (const fa of accesses) {
+      const userId = toIdString(fa.user_id?._id ? fa.user_id._id : fa.user_id);
+      if (!userId) continue;
+      if (explicitUserIds.has(userId)) continue;
+      if (seenUserIds.has(userId)) continue;
+      seenUserIds.add(userId);
+
+      const perms = ROLE_TO_PERMISSIONS[fa.role] || ROLE_TO_PERMISSIONS.viewer;
+      inheritedEntries.push({
+        _id: fa._id,
+        file_id: file._id,
+        project_id: project._id,
+        user_id: fa.user_id,
+        can_view: perms.can_view,
+        can_edit: perms.can_edit,
+        can_download: perms.can_download,
+        can_delete: perms.can_delete,
+        granted_by: fa.created_by || null,
+        created_on: fa.created_on,
+        updated_on: fa.updated_on,
+        deleted_on: 0,
+        inherited: true,
+        inherited_from_folder_id: toIdString(fa.folder_id?._id ? fa.folder_id._id : fa.folder_id),
+      });
+    }
+  }
+
+  return inheritedEntries;
+};
+
 const getFileAccess = async ({ user, project, fileId }) => {
   const file = await DriveFileRepository.getFile({
     filters: {
@@ -284,7 +448,7 @@ const getFileAccess = async ({ user, project, fileId }) => {
   // User needs at least view permission to see access list
   await assertFileAccess({ user, project, file, permission: 'view' });
 
-  return DriveFileAccessRepository.getAccesses({
+  const explicitAccess = await DriveFileAccessRepository.getAccesses({
     filters: {
       project_id: project._id,
       file_id: fileId,
@@ -292,6 +456,20 @@ const getFileAccess = async ({ user, project, fileId }) => {
     },
     sort: { created_on: 1 },
   });
+
+  // ZL-18804/-18805: union folder-level inherited access. Wrapped in try/catch
+  // so any folder-walk failure logs and falls back to the original (explicit-only)
+  // behavior — never 500 the access list.
+  let inheritedAccess = [];
+  try {
+    inheritedAccess = await _getInheritedFileAccessFromFolders({
+      project, file, explicitAccess,
+    });
+  } catch (err) {
+    console.error('[getFileAccess] folder inheritance lookup failed:', err.message);
+  }
+
+  return [...explicitAccess, ...inheritedAccess];
 };
 
 /* ───────────── Set File Access List ───────────── */
@@ -321,10 +499,7 @@ const setFileAccessList = async ({ user, project, fileId, entries }) => {
     if (!userId) return;
     normalizedEntries.set(userId, {
       user_id: entry.user_id,
-      can_view: entry.can_view !== undefined ? entry.can_view : true,
-      can_edit: entry.can_edit !== undefined ? entry.can_edit : false,
-      can_download: entry.can_download !== undefined ? entry.can_download : true,
-      can_delete: entry.can_delete !== undefined ? entry.can_delete : false,
+      ...normalizePermissions(entry),
     });
   });
 

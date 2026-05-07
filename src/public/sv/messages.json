@@ -98,5 +98,13 @@
   "drive_file_shared": "Drive-fil delad.",
   "drive_file_shared_message": "En Drive-fil har delats med dig av {{user_name}}.",
   "drive_folder_shared": "Drive-mapp delad.",
-  "drive_folder_shared_message": "En Drive-mapp har delats med dig av {{user_name}}."
+  "drive_folder_shared_message": "En Drive-mapp har delats med dig av {{user_name}}.",
+  "drive_file_uploaded": "Drive-fil uppladdad.",
+  "drive_file_uploaded_message": "En Drive-fil har laddats upp av {{user_name}}.",
+  "drive_file_updated": "Drive-fil uppdaterad.",
+  "drive_file_updated_message": "En Drive-fil har uppdaterats av {{user_name}}.",
+  "drive_file_moved": "Drive-fil flyttad.",
+  "drive_file_moved_message": "En Drive-fil har flyttats av {{user_name}}.",
+  "drive_folder_updated": "Drive-mapp uppdaterad.",
+  "drive_folder_updated_message": "En Drive-mapp har uppdaterats av {{user_name}}."
 }

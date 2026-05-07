@@ -15,4 +15,18 @@ const socketClient = (event, data) => {
   });
 };
 
+/**
+ * Build a deduped array of user-room strings for use as the socket emit's
+ * `room` field. The socket server accepts `room: [...]` and broadcasts to all
+ * rooms in a single emit (see zillit_project_managment::permission.js for the
+ * canonical pattern). Each user_id (as string) is the room they subscribe to
+ * — same per-user delivery pattern zillit_libs notification service uses.
+ *
+ * Filters out falsy IDs and dedupes. Returns empty array if no recipients.
+ */
+const buildUserRooms = (userIds = []) => Array.from(new Set(
+  (userIds || []).map((id) => (id ? id.toString() : null)).filter(Boolean),
+));
+
 export default socketClient;
+export { buildUserRooms };

@@ -98,5 +98,13 @@
   "drive_file_shared": "تمت مشاركة ملف Drive.",
   "drive_file_shared_message": "تمت مشاركة ملف Drive معك بواسطة {{user_name}}.",
   "drive_folder_shared": "تمت مشاركة مجلد Drive.",
-  "drive_folder_shared_message": "تمت مشاركة مجلد Drive معك بواسطة {{user_name}}."
+  "drive_folder_shared_message": "تمت مشاركة مجلد Drive معك بواسطة {{user_name}}.",
+  "drive_file_uploaded": "تم رفع ملف Drive.",
+  "drive_file_uploaded_message": "تم رفع ملف Drive بواسطة {{user_name}}.",
+  "drive_file_updated": "تم تحديث ملف Drive.",
+  "drive_file_updated_message": "تم تحديث ملف Drive بواسطة {{user_name}}.",
+  "drive_file_moved": "تم نقل ملف Drive.",
+  "drive_file_moved_message": "تم نقل ملف Drive بواسطة {{user_name}}.",
+  "drive_folder_updated": "تم تحديث مجلد Drive.",
+  "drive_folder_updated_message": "تم تحديث مجلد Drive بواسطة {{user_name}}."
 }

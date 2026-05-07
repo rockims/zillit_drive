@@ -12,7 +12,7 @@ import DriveAccessService from './driveAccess.js';
 import DriveFileAccessService from './driveFileAccess.js';
 import DriveActivityService from './driveActivity.js';
 import DriveNotificationReceivers from './driveNotificationReceivers.js';
-import socketClient from '../../config/socketClient.js';
+import socketClient, { buildUserRooms } from '../../config/socketClient.js';
 
 // Field sanitization — prevents injection of protected fields
 const FILE_ALLOWED_FIELDS = ['file_name', 'folder_id', 'file_path', 'description', 'file_type', 'file_extension', 'file_size', 'file_size_bytes', 'mime_type', 'attachments'];
@@ -250,9 +250,13 @@ const createFile = async ({ user, project, device, body }) => {
     });
   }
 
+  // ZL-18867: Drive is a Private Drive — duplicate name check must be scoped to
+  // the user's own files, not the entire project. Without created_by here,
+  // User B couldn't upload a file named "report.pdf" if User A already had one.
   const duplicateFilters = {
     project_id: project._id,
     folder_id: body.folder_id || null,
+    created_by: user._id,
     deleted_on: 0,
   };
 
@@ -353,9 +357,15 @@ const createFile = async ({ user, project, device, body }) => {
     );
   }
 
+  // ZL-18799: emit only to users with access (actor + ACL receivers) instead
+  // of the project-wide room — broadcast was causing files to appear in
+  // unrelated users' "Shared with Me". Socket server accepts room: [...]
+  // and fans out to all listed user-rooms in a single emit (matches the
+  // canonical pattern in zillit_project_managment::permission.js).
   socketClient('__admin_events__', {
     event: 'drive:file:added',
-    room: `${project._id.toString()}_room`,
+    room: buildUserRooms([user._id, ...receiverIds]),
+    except: device._id,
     data: {
       project_id: project._id,
       device_id: device._id,
@@ -685,9 +695,11 @@ const updateFile = async ({ user, project, device, params, body }) => {
     const normalizedFileName = body.file_name.trim().toLowerCase();
     const targetFolderId = body.folder_id !== undefined ? body.folder_id : existingFile.folder_id;
 
+    // ZL-18867: scope duplicate check to the user's own files (Private Drive).
     const duplicateFilters = {
       project_id: project._id,
       folder_id: targetFolderId || null,
+      created_by: user._id,
       deleted_on: 0,
       _id: { $ne: fileId },
     };
@@ -812,47 +824,6 @@ const deleteFile = async ({ user, project, device, params }) => {
 
   await DriveFileRepository.deleteFile({ filters, data: deleteData });
 
-  const [deleteReceiverIds, deleteNotifLevels] = await Promise.all([
-    DriveNotificationReceivers.getFileReceivers({
-      project,
-      actorId: user._id,
-      fileId: file._id,
-      folderId: file.folder_id,
-    }),
-    DriveNotificationReceivers.buildNotificationLevels({
-      project,
-      folderId: file.folder_id,
-      itemId: file._id,
-    }),
-  ]);
-
-  if (deleteReceiverIds.length > 0) {
-    await NotificationService.notifyAll(
-      {
-        project,
-        sender: user._id,
-        receiver: deleteReceiverIds,
-        section: sections.TOOLS,
-        tool: DRIVE_TOOL,
-        unit: DRIVE_UNIT_FILE,
-        action: 'drive_file_deleted',
-        reference_id: deleteNotifLevels.reference_id,
-        level_1: deleteNotifLevels.level_1,
-        level_2: deleteNotifLevels.level_2,
-        level_3: deleteNotifLevels.level_3,
-        levels: deleteNotifLevels.levels,
-        reference_data: {
-          file_id: toIdString(file._id),
-          file_name: file.file_name,
-          folder_id: file.folder_id ? toIdString(file.folder_id) : null,
-        },
-        message: `File "${file.file_name}" deleted`,
-      },
-      { notify: true, save: true },
-      socketClient,
-    );
-  }
-
   socketClient('__admin_events__', {
     event: 'drive:file:deleted',
     room: `${project._id.toString()}_room`,
@@ -927,9 +898,12 @@ const moveFile = async ({ user, project, device, params, body }) => {
     });
   }
 
+  // ZL-18867: scope duplicate check to the user's own files (Private Drive).
+  // A move is between folders the user owns, so user._id is the right scope.
   const duplicateFilters = {
     project_id: project._id,
     folder_id: target_folder_id || null,
+    created_by: user._id,
     deleted_on: 0,
     _id: { $ne: fileId },
   };
