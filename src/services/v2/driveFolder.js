@@ -22,10 +22,14 @@ const createFolder = async ({ user, project, device, body, query }) => {
   // Trim and normalize the folder name for duplicate checking
   const normalizedFolderName = body.folder_name.trim().toLowerCase();
 
+  // ZL-18867: Drive is a Private Drive — duplicate name check must be scoped to
+  // the user's own folders, not the entire project. Without created_by here,
+  // User B couldn't create a folder named "Mirror" if User A already had one.
   // Check if a folder with the same name already exists in the same parent folder
   const filters = {
     project_id: project._id,
     parent_folder_id: body.parent_folder_id || null,
+    created_by: user._id,
     deleted_on: 0,
   };
 
@@ -156,9 +160,11 @@ const updateFolder = async ({ user, project, device, params, body }) => {
   if (body.folder_name && body.folder_name.trim().toLowerCase() !== existingFolder.folder_name.trim().toLowerCase()) {
     const normalizedFolderName = body.folder_name.trim().toLowerCase();
 
+    // ZL-18867: scope duplicate check to the user's own folders (Private Drive).
     const duplicateFilters = {
       project_id: project._id,
       parent_folder_id: existingFolder.parent_folder_id,
+      created_by: user._id,
       deleted_on: 0,
       _id: { $ne: folderId } // Exclude current folder from duplicate check
     };
