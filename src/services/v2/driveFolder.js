@@ -225,9 +225,13 @@ const createFolder = async ({ user, project, device, body }) => {
     });
   }
 
+  // ZL-18867: Drive is a Private Drive — duplicate name check must be scoped to
+  // the user's own folders, not the entire project. Without created_by here,
+  // User B couldn't create a folder named "Mirror" if User A already had one.
   const duplicateFilters = {
     project_id: project._id,
     parent_folder_id: body.parent_folder_id || null,
+    created_by: user._id,
     deleted_on: 0,
   };
 
@@ -901,9 +905,11 @@ const updateFolder = async ({ user, project, device, params, body }) => {
   const nextFolderName = body.folder_name || existingFolder.folder_name;
   const normalizedFolderName = nextFolderName.trim().toLowerCase();
 
+  // ZL-18867: scope duplicate check to the user's own folders (Private Drive).
   const duplicateFilters = {
     project_id: project._id,
     parent_folder_id: requestedParentId || null,
+    created_by: user._id,
     deleted_on: 0,
     _id: { $ne: folderId },
   };
@@ -1303,10 +1309,12 @@ const moveFolder = async ({ user, project, device, params, body }) => {
   }
 
   // 7. Check for duplicate folder name in target
+  // ZL-18867: scope duplicate check to the user's own folders (Private Drive).
   const duplicateFolder = await DriveFolderRepository.getFolder({
     filters: {
       project_id: project._id,
       parent_folder_id: target_folder_id || null,
+      created_by: user._id,
       deleted_on: 0,
       _id: { $ne: folderId },
       folder_name: { $regex: new RegExp(`^${escapeRegex(folder.folder_name.trim())}$`, 'i') },
