@@ -250,9 +250,13 @@ const createFile = async ({ user, project, device, body }) => {
     });
   }
 
+  // ZL-18867: Drive is a Private Drive — duplicate name check must be scoped to
+  // the user's own files, not the entire project. Without created_by here,
+  // User B couldn't upload a file named "report.pdf" if User A already had one.
   const duplicateFilters = {
     project_id: project._id,
     folder_id: body.folder_id || null,
+    created_by: user._id,
     deleted_on: 0,
   };
 
@@ -691,9 +695,11 @@ const updateFile = async ({ user, project, device, params, body }) => {
     const normalizedFileName = body.file_name.trim().toLowerCase();
     const targetFolderId = body.folder_id !== undefined ? body.folder_id : existingFile.folder_id;
 
+    // ZL-18867: scope duplicate check to the user's own files (Private Drive).
     const duplicateFilters = {
       project_id: project._id,
       folder_id: targetFolderId || null,
+      created_by: user._id,
       deleted_on: 0,
       _id: { $ne: fileId },
     };
@@ -892,9 +898,12 @@ const moveFile = async ({ user, project, device, params, body }) => {
     });
   }
 
+  // ZL-18867: scope duplicate check to the user's own files (Private Drive).
+  // A move is between folders the user owns, so user._id is the right scope.
   const duplicateFilters = {
     project_id: project._id,
     folder_id: target_folder_id || null,
+    created_by: user._id,
     deleted_on: 0,
     _id: { $ne: fileId },
   };
