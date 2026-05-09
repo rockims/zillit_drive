@@ -1,5 +1,6 @@
 import BadRequest from 'zillit-libs/errors/BadRequest';
 import NotificationService from 'zillit-libs/services-v2/notification';
+import NotificationRepository from 'zillit-libs/repositories-v2/notification';
 import { rights } from 'zillit-libs/services-v2/permissions';
 import DriveFolder from 'zillit-libs/mongo-models-v2/DriveFolder';
 import DriveFile from 'zillit-libs/mongo-models-v2/DriveFile';
@@ -1345,6 +1346,128 @@ const moveFolder = async ({ user, project, device, params, body }) => {
         user, project, folder: targetFolder,
       });
     }
+  }
+
+  // ZL-18871/-18872/-18873: emit move notification with fresh ancestry +
+  // silent-mark prior unread badges that carry stale level_1..level_3.
+  //
+  // Two problems before:
+  //   (1) moveFolder didn't notify anyone — only fired the admin socket event,
+  //       so receivers never got a `notification:save` for folder moves.
+  //   (2) Existing badges for the moved folder still carried the OLD ancestry
+  //       (level_1=folder._id when it was at root, etc.). The FE rollup keys
+  //       off those levels — after the move, the old badge no longer rolls up
+  //       to the new ancestor (e.g., the new parent's badge count is wrong).
+  //
+  // Fix mirrors the share/revoke pattern in driveFileAccess.setFileAccessList:
+  //   - find prior unread notifications referencing this folder, mark them read
+  //   - emit `notification:silent` with read_notification_ids so FE drops them
+  //   - emit fresh `notification:save` with new levels reflecting current path
+  try {
+    const sourceFolderId = folder.parent_folder_id ? toIdString(folder.parent_folder_id) : null;
+    const movedTargetFolderId = target_folder_id || null;
+    const [moveReceiverIds, moveNotifLevels] = await Promise.all([
+      DriveNotificationReceivers.getMoveReceivers({
+        project,
+        actorId: user._id,
+        sourceFolderId,
+        targetFolderId: movedTargetFolderId,
+      }),
+      DriveNotificationReceivers.buildNotificationLevels({
+        project,
+        folderId: updatedFolder.parent_folder_id || updatedFolder._id,
+        itemId: updatedFolder._id,
+      }),
+    ]);
+
+    // Also include direct sharees on the folder itself — they need to know
+    // their shared folder moved even if they have no role on src/target.
+    const folderOwnSharees = await DriveNotificationReceivers.getFolderReceivers({
+      project, actorId: user._id, folderId: updatedFolder._id,
+    });
+    const allReceiverIds = Array.from(new Set([
+      ...moveReceiverIds.map(toIdString),
+      ...folderOwnSharees.map(toIdString),
+    ])).filter(Boolean);
+
+    if (allReceiverIds.length > 0) {
+      // Silent-mark prior unread notifications for THIS folder. Their levels
+      // reflect the pre-move ancestry and would otherwise produce stale
+      // rollups in the FE BadgeDB cache.
+      const priorMoveFilters = {
+        project_id: project._id,
+        receiver: { $in: allReceiverIds },
+        reference_id: toIdString(updatedFolder._id),
+        message_read: false,
+      };
+
+      const priorReadIds = await NotificationRepository.getNotificationIDs({
+        filters: priorMoveFilters,
+        field: 'notification_uuid',
+      });
+
+      if (priorReadIds.length > 0) {
+        await NotificationRepository.updateNotification({
+          filters: priorMoveFilters,
+          data: { message_read: true },
+        });
+
+        await NotificationService.notifyAll(
+          {
+            project,
+            sender: user._id,
+            receiver: allReceiverIds,
+            section: sections.TOOLS,
+            tool: DRIVE_TOOL,
+            unit: DRIVE_UNIT_FOLDER,
+            action: 'drive_folder_moved',
+            reference_id: moveNotifLevels.reference_id,
+            level_1: moveNotifLevels.level_1,
+            level_2: moveNotifLevels.level_2,
+            level_3: moveNotifLevels.level_3,
+            levels: moveNotifLevels.levels,
+            reference_data: {
+              folder_id: toIdString(updatedFolder._id),
+              folder_name: updatedFolder.folder_name,
+              source_parent_id: sourceFolderId,
+              target_parent_id: movedTargetFolderId,
+              read_notification_ids: priorReadIds.filter(Boolean),
+            },
+          },
+          { save: false, silent: true },
+          socketClient,
+        );
+      }
+
+      await NotificationService.notifyAll(
+        {
+          project,
+          sender: user._id,
+          receiver: allReceiverIds,
+          section: sections.TOOLS,
+          tool: DRIVE_TOOL,
+          unit: DRIVE_UNIT_FOLDER,
+          action: 'drive_folder_moved',
+          reference_id: moveNotifLevels.reference_id,
+          level_1: moveNotifLevels.level_1,
+          level_2: moveNotifLevels.level_2,
+          level_3: moveNotifLevels.level_3,
+          levels: moveNotifLevels.levels,
+          reference_data: {
+            folder_id: toIdString(updatedFolder._id),
+            folder_name: updatedFolder.folder_name,
+            source_parent_id: sourceFolderId,
+            target_parent_id: movedTargetFolderId,
+          },
+          message: `Folder "${updatedFolder.folder_name}" moved`,
+        },
+        { notify: true, save: true },
+        socketClient,
+      );
+    }
+  } catch (err) {
+    // Notification path is non-fatal — the move itself already succeeded.
+    console.error('[moveFolder_notify_failed]:', err.message);
   }
 
   // 10. Socket emit for real-time updates
