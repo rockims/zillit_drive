@@ -338,9 +338,20 @@ const completeUpload = async ({ user, project, device, params, body }) => {
       deleted_on: 0,
     },
   });
+  // ZL-18798: DriveFileAccessRepository.getAccesses populates user_id with
+  // the full ProjectUser document (full_name/first_name/etc). Calling
+  // .toString() directly on a populated Mongoose subdoc returns its
+  // toJSON()-style multi-line dump, NOT the ObjectId hex. Those garbage
+  // strings then poison receiverIds passed to NotificationService.notifyAll,
+  // which throws CastError inside the $in lookup against ProjectUser, and
+  // the entire notify call fails silently — receivers never get
+  // notification:save (they only see the admin "observer" event, which is
+  // exactly what iOS team reported on this ticket).
+  // Fix: pull r.user_id?._id when populated, fallback to r.user_id when
+  // raw — same pattern already in driveNotificationReceivers (de3c704).
   const accessUserIds = fileAccessRecords
-    .map((r) => r.user_id?.toString())
-    .filter((id) => id && id !== file.created_by?.toString());
+    .map((r) => toIdString(r.user_id?._id || r.user_id))
+    .filter((id) => id && id !== toIdString(file.created_by));
 
   // Also include users with folder-level access (for shared folders)
   let folderAccessUserIds = [];
