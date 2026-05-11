@@ -106,5 +106,7 @@
   "drive_file_moved": "تم نقل ملف Drive.",
   "drive_file_moved_message": "تم نقل ملف Drive بواسطة {{user_name}}.",
   "drive_folder_updated": "تم تحديث مجلد Drive.",
-  "drive_folder_updated_message": "تم تحديث مجلد Drive بواسطة {{user_name}}."
+  "drive_folder_updated_message": "تم تحديث مجلد Drive بواسطة {{user_name}}.",
+  "drive_my_drive_label": "محرّك الأقراص الخاص بي",
+  "drive_shared_with_me_label": "تمت مشاركتها معي"
 }

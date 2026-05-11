@@ -106,5 +106,7 @@
   "drive_file_moved": "Drive文件已移动。",
   "drive_file_moved_message": "{{user_name}}移动了一个Drive文件。",
   "drive_folder_updated": "Drive文件夹已更新。",
-  "drive_folder_updated_message": "{{user_name}}更新了一个Drive文件夹。"
+  "drive_folder_updated_message": "{{user_name}}更新了一个Drive文件夹。",
+  "drive_my_drive_label": "我的云端硬盘",
+  "drive_shared_with_me_label": "与我共享"
 }

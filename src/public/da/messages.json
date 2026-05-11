@@ -106,5 +106,7 @@
   "drive_file_moved": "Drive-fil flyttet.",
   "drive_file_moved_message": "En Drive-fil er blevet flyttet af {{user_name}}.",
   "drive_folder_updated": "Drive-mappe opdateret.",
-  "drive_folder_updated_message": "En Drive-mappe er blevet opdateret af {{user_name}}."
+  "drive_folder_updated_message": "En Drive-mappe er blevet opdateret af {{user_name}}.",
+  "drive_my_drive_label": "Mit drev",
+  "drive_shared_with_me_label": "Delt med mig"
 }

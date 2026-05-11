@@ -106,5 +106,7 @@
   "drive_file_moved": "Drive file moved.",
   "drive_file_moved_message": "A drive file has been moved by {{user_name}}.",
   "drive_folder_updated": "Drive folder updated.",
-  "drive_folder_updated_message": "A drive folder has been updated by {{user_name}}."
+  "drive_folder_updated_message": "A drive folder has been updated by {{user_name}}.",
+  "drive_my_drive_label": "My Drive",
+  "drive_shared_with_me_label": "Shared with Me"
 }

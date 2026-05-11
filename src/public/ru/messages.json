@@ -106,5 +106,7 @@
   "drive_file_moved": "Файл Drive перемещен.",
   "drive_file_moved_message": "{{user_name}} переместил(а) файл Drive.",
   "drive_folder_updated": "Папка Drive обновлена.",
-  "drive_folder_updated_message": "{{user_name}} обновил(а) папку Drive."
+  "drive_folder_updated_message": "{{user_name}} обновил(а) папку Drive.",
+  "drive_my_drive_label": "Мой диск",
+  "drive_shared_with_me_label": "Доступные мне"
 }

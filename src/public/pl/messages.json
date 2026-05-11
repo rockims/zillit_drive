@@ -106,5 +106,7 @@
   "drive_file_moved": "Plik Drive przeniesiony.",
   "drive_file_moved_message": "{{user_name}} przeniósł(a) plik Drive.",
   "drive_folder_updated": "Folder Drive zaktualizowany.",
-  "drive_folder_updated_message": "{{user_name}} zaktualizował(a) folder Drive."
+  "drive_folder_updated_message": "{{user_name}} zaktualizował(a) folder Drive.",
+  "drive_my_drive_label": "Mój dysk",
+  "drive_shared_with_me_label": "Udostępnione dla mnie"
 }

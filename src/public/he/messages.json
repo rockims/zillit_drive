@@ -106,5 +106,7 @@
   "drive_file_moved": "קובץ Drive הועבר.",
   "drive_file_moved_message": "{{user_name}} העביר קובץ Drive.",
   "drive_folder_updated": "תיקיית Drive עודכנה.",
-  "drive_folder_updated_message": "{{user_name}} עדכן תיקיית Drive."
+  "drive_folder_updated_message": "{{user_name}} עדכן תיקיית Drive.",
+  "drive_my_drive_label": "הדרייב שלי",
+  "drive_shared_with_me_label": "שותף איתי"
 }

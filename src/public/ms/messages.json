@@ -106,5 +106,7 @@
   "drive_file_moved": "Fail Drive dipindahkan.",
   "drive_file_moved_message": "Fail Drive telah dipindahkan oleh {{user_name}}.",
   "drive_folder_updated": "Folder Drive dikemas kini.",
-  "drive_folder_updated_message": "Folder Drive telah dikemas kini oleh {{user_name}}."
+  "drive_folder_updated_message": "Folder Drive telah dikemas kini oleh {{user_name}}.",
+  "drive_my_drive_label": "Pemacu Saya",
+  "drive_shared_with_me_label": "Dikongsi dengan saya"
 }

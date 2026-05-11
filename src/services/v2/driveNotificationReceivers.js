@@ -1,5 +1,6 @@
 import mongoose from 'mongoose';
 import DriveFolder from 'zillit-libs/mongo-models-v2/DriveFolder';
+import NotificationService from 'zillit-libs/services-v2/notification';
 import DriveFolderAccessRepository from '../../repositories/v2/driveFolderAccess.js';
 import DriveFileAccessRepository from '../../repositories/v2/driveFileAccess.js';
 
@@ -197,9 +198,143 @@ const getMoveReceivers = async ({ project, actorId, sourceFolderId, targetFolder
   return [...new Set([...sourceUsers, ...targetUsers])];
 };
 
+/* ───────────── View Classification (My Drive vs Shared with Me) ───────────── */
+
+// Unit constants per FE-requested split — see README. Each drive notification
+// now carries one of these two units based on whether the root ancestor of
+// the item is owned by the receiver (My Drive) or by someone else (Shared
+// with Me). This eliminates client-side classification logic and the race
+// conditions it caused (folder list not loaded → badge dropped on wrong tab).
+const DRIVE_UNIT_MY_DRIVE = 'drive_my_drive_label';
+const DRIVE_UNIT_SHARED_WITH_ME = 'drive_shared_with_me_label';
+
+/**
+ * Resolve the owner (created_by) of the root ancestor for a drive item.
+ *
+ * - If level_1 is a folder id, look up that folder's created_by.
+ * - If level_1 is the 'root' sentinel (item at project root with no parent
+ *   folder), the item itself IS the root — look up its created_by.
+ *
+ * Returns the owner user id as a string, or null if the lookup fails.
+ *
+ * Used by classifyReceiversByView to bucket receivers into the
+ * `drive_my_drive_label` vs `drive_shared_with_me_label` units.
+ */
+const resolveRootAncestorOwner = async ({ project, level_1: level1, referenceId, isFile }) => {
+  // Lazy import to avoid circular dependency with driveFile/driveFolder repos.
+  const DriveFolderRepository = (await import('../../repositories/v2/driveFolder.js')).default;
+  const DriveFileRepository = (await import('../../repositories/v2/driveFile.js')).default;
+
+  if (!level1 || level1 === 'root') {
+    // Item is at project root — the item itself is the "ancestor".
+    if (!referenceId) return null;
+    const repo = isFile ? DriveFileRepository : DriveFolderRepository;
+    const fetcher = isFile ? repo.getFile : repo.getFolder;
+    const item = await fetcher({
+      filters: { _id: referenceId, project_id: project._id },
+    });
+    return toIdString(item?.created_by) || null;
+  }
+
+  const folder = await DriveFolderRepository.getFolder({
+    filters: { _id: level1, project_id: project._id },
+  });
+  return toIdString(folder?.created_by) || null;
+};
+
+/**
+ * Bucket receivers by view: receivers who own the root ancestor go to
+ * "My Drive", everyone else goes to "Shared with Me". Each bucket is meant
+ * to be sent in a separate notifyAll call with the appropriate unit.
+ *
+ * @param {Object} params
+ * @param {string|null} params.rootOwnerId — receiver id (as string) who owns the
+ *   root ancestor folder/file. If null, all receivers fall into shared.
+ * @param {Array<string|ObjectId>} params.receivers — list of receiver ids
+ * @returns {{ myDrive: string[], shared: string[] }} normalized id-string arrays
+ */
+const classifyReceiversByView = ({ rootOwnerId, receivers }) => {
+  const ownerStr = toIdString(rootOwnerId);
+  const myDrive = [];
+  const shared = [];
+  for (const r of receivers || []) {
+    const rStr = toIdString(r?._id || r);
+    if (!rStr) continue;
+    if (ownerStr && rStr === ownerStr) {
+      myDrive.push(rStr);
+    } else {
+      shared.push(rStr);
+    }
+  }
+  return { myDrive, shared };
+};
+
+/**
+ * Wrapper around NotificationService.notifyAll that splits the receivers list
+ * by view (My Drive vs Shared with Me) and dispatches two notifyAll calls —
+ * one with `unit: drive_my_drive_label` for receivers who own the root
+ * ancestor, one with `unit: drive_shared_with_me_label` for everyone else.
+ *
+ * The caller passes a single base payload (with whatever `action`,
+ * `reference_id`, `level_*`, `reference_data`, `message` it normally would)
+ * and the helper:
+ *   1. Resolves the root ancestor's owner.
+ *   2. Classifies receivers by view.
+ *   3. Calls notifyAll up to twice — once per non-empty bucket, each time
+ *      overriding `unit` to the matching `DRIVE_UNIT_*` constant.
+ *
+ * The base payload's `unit` is overridden — callers can omit it.
+ *
+ * @param {Object} params
+ * @param {Object} params.payload — base notification payload (without unit/receiver)
+ * @param {Array} params.receivers — receivers to be split and notified
+ * @param {Object} params.settings — notify options (notify/save/silent/etc)
+ * @param {Function} params.socketClient — socket client to use
+ * @param {Object} params.project — project doc (passed to resolveRootAncestorOwner)
+ * @param {string|null} params.level_1 — the level_1 from buildNotificationLevels
+ * @param {string} params.reference_id — the item id (file or folder being acted on)
+ * @param {boolean} params.isFile — true if this is a file event, false for folder
+ */
+const notifyAllByView = async ({
+  payload, receivers, settings, socketClient,
+  project, level_1: level1, reference_id: referenceId, isFile,
+}) => {
+  if (!receivers || receivers.length === 0) return;
+
+  const rootOwnerId = await resolveRootAncestorOwner({
+    project, level_1: level1, referenceId, isFile,
+  });
+  const { myDrive, shared } = classifyReceiversByView({
+    rootOwnerId,
+    receivers,
+  });
+
+  const tasks = [];
+  if (myDrive.length > 0) {
+    tasks.push(NotificationService.notifyAll(
+      { ...payload, unit: DRIVE_UNIT_MY_DRIVE, receiver: myDrive },
+      settings,
+      socketClient,
+    ));
+  }
+  if (shared.length > 0) {
+    tasks.push(NotificationService.notifyAll(
+      { ...payload, unit: DRIVE_UNIT_SHARED_WITH_ME, receiver: shared },
+      settings,
+      socketClient,
+    ));
+  }
+  await Promise.all(tasks);
+};
+
 export default {
   buildNotificationLevels,
   getFolderReceivers,
   getFileReceivers,
   getMoveReceivers,
+  resolveRootAncestorOwner,
+  classifyReceiversByView,
+  notifyAllByView,
+  DRIVE_UNIT_MY_DRIVE,
+  DRIVE_UNIT_SHARED_WITH_ME,
 };

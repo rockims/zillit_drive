@@ -332,14 +332,17 @@ const createFile = async ({ user, project, device, body }) => {
   ]);
 
   if (receiverIds.length > 0) {
-    await NotificationService.notifyAll(
-      {
+    // FE-request: split receivers between drive_my_drive_label (root ancestor
+    // owned by this receiver) and drive_shared_with_me_label (root ancestor
+    // owned by someone else). The wrapper resolves the owner and dispatches
+    // up to two notifyAll calls so each receiver lands on the right tab
+    // without any client-side classification.
+    await DriveNotificationReceivers.notifyAllByView({
+      payload: {
         project,
         sender: user._id,
-        receiver: receiverIds,
         section: sections.TOOLS,
         tool: DRIVE_TOOL,
-        unit: DRIVE_UNIT_FILE,
         action: 'drive_file_uploaded',
         reference_id: notifLevels.reference_id,
         level_1: notifLevels.level_1,
@@ -353,9 +356,14 @@ const createFile = async ({ user, project, device, body }) => {
         },
         message: `New file "${file.file_name}" uploaded`,
       },
-      { notify: true, save: true },
+      receivers: receiverIds,
+      settings: { notify: true, save: true },
       socketClient,
-    );
+      project,
+      level_1: notifLevels.level_1,
+      reference_id: notifLevels.reference_id,
+      isFile: true,
+    });
   }
 
   // ZL-18799: emit only to users with access (actor + ACL receivers) instead
@@ -754,14 +762,12 @@ const updateFile = async ({ user, project, device, params, body }) => {
   ]);
 
   if (updateReceiverIds.length > 0) {
-    await NotificationService.notifyAll(
-      {
+    await DriveNotificationReceivers.notifyAllByView({
+      payload: {
         project,
         sender: user._id,
-        receiver: updateReceiverIds,
         section: sections.TOOLS,
         tool: DRIVE_TOOL,
-        unit: DRIVE_UNIT_FILE,
         action: 'drive_file_updated',
         reference_id: updateNotifLevels.reference_id,
         level_1: updateNotifLevels.level_1,
@@ -775,9 +781,14 @@ const updateFile = async ({ user, project, device, params, body }) => {
         },
         message: `File "${updatedFile.file_name}" updated`,
       },
-      { notify: true, save: true },
+      receivers: updateReceiverIds,
+      settings: { notify: true, save: true },
       socketClient,
-    );
+      project,
+      level_1: updateNotifLevels.level_1,
+      reference_id: updateNotifLevels.reference_id,
+      isFile: true,
+    });
   }
 
   socketClient('__admin_events__', {
@@ -991,14 +1002,12 @@ const moveFile = async ({ user, project, device, params, body }) => {
           data: { message_read: true },
         });
 
-        await NotificationService.notifyAll(
-          {
+        await DriveNotificationReceivers.notifyAllByView({
+          payload: {
             project,
             sender: user._id,
-            receiver: moveReceiverIds,
             section: sections.TOOLS,
             tool: DRIVE_TOOL,
-            unit: DRIVE_UNIT_FILE,
             action: 'drive_file_moved',
             reference_id: moveNotifLevels.reference_id,
             level_1: moveNotifLevels.level_1,
@@ -1013,22 +1022,25 @@ const moveFile = async ({ user, project, device, params, body }) => {
               read_notification_ids: priorReadIds.filter(Boolean),
             },
           },
-          { save: false, silent: true },
+          receivers: moveReceiverIds,
+          settings: { save: false, silent: true },
           socketClient,
-        );
+          project,
+          level_1: moveNotifLevels.level_1,
+          reference_id: moveNotifLevels.reference_id,
+          isFile: true,
+        });
       }
     } catch (err) {
       console.error('[moveFile_silent_mark_failed]:', err.message);
     }
 
-    await NotificationService.notifyAll(
-      {
+    await DriveNotificationReceivers.notifyAllByView({
+      payload: {
         project,
         sender: user._id,
-        receiver: moveReceiverIds,
         section: sections.TOOLS,
         tool: DRIVE_TOOL,
-        unit: DRIVE_UNIT_FILE,
         action: 'drive_file_moved',
         reference_id: moveNotifLevels.reference_id,
         level_1: moveNotifLevels.level_1,
@@ -1043,9 +1055,14 @@ const moveFile = async ({ user, project, device, params, body }) => {
         },
         message: `File "${movedFile.file_name}" moved`,
       },
-      { notify: true, save: true },
+      receivers: moveReceiverIds,
+      settings: { notify: true, save: true },
       socketClient,
-    );
+      project,
+      level_1: moveNotifLevels.level_1,
+      reference_id: moveNotifLevels.reference_id,
+      isFile: true,
+    });
   }
 
   socketClient('__admin_events__', {

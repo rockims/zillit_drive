@@ -106,5 +106,7 @@
   "drive_file_moved": "Driveファイルが移動されました。",
   "drive_file_moved_message": "{{user_name}}がDriveファイルを移動しました。",
   "drive_folder_updated": "Driveフォルダが更新されました。",
-  "drive_folder_updated_message": "{{user_name}}がDriveフォルダを更新しました。"
+  "drive_folder_updated_message": "{{user_name}}がDriveフォルダを更新しました。",
+  "drive_my_drive_label": "マイドライブ",
+  "drive_shared_with_me_label": "共有アイテム"
 }

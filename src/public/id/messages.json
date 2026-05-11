@@ -106,5 +106,7 @@
   "drive_file_moved": "File Drive dipindahkan.",
   "drive_file_moved_message": "File Drive telah dipindahkan oleh {{user_name}}.",
   "drive_folder_updated": "Folder Drive diperbarui.",
-  "drive_folder_updated_message": "Folder Drive telah diperbarui oleh {{user_name}}."
+  "drive_folder_updated_message": "Folder Drive telah diperbarui oleh {{user_name}}.",
+  "drive_my_drive_label": "Drive Saya",
+  "drive_shared_with_me_label": "Dibagikan dengan saya"
 }
