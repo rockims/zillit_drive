@@ -3,6 +3,7 @@ import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import BadRequest from 'zillit-libs/errors/BadRequest';
 import Forbidden from 'zillit-libs/errors/Forbidden';
 import NotificationService from 'zillit-libs/services-v2/notification';
+import NotificationRepository from 'zillit-libs/repositories-v2/notification';
 import { rights } from 'zillit-libs/services-v2/permissions';
 
 import DriveFileRepository from '../../repositories/v2/driveFile.js';
@@ -966,6 +967,60 @@ const moveFile = async ({ user, project, device, params, body }) => {
   ]);
 
   if (moveReceiverIds.length > 0) {
+    // ZL-18871/-18872/-18873: silent-mark prior unread notifications for this
+    // file before emitting the move notification. Their levels reflect the
+    // pre-move ancestry, so without this the FE BadgeDB cache rolls badges
+    // up to the OLD parent and the new parent's count is short by one.
+    // Same pattern as setFileAccessList's prior-share cleanup.
+    try {
+      const priorMoveFilters = {
+        project_id: project._id,
+        receiver: { $in: moveReceiverIds },
+        reference_id: toIdString(movedFile._id),
+        message_read: false,
+      };
+
+      const priorReadIds = await NotificationRepository.getNotificationIDs({
+        filters: priorMoveFilters,
+        field: 'notification_uuid',
+      });
+
+      if (priorReadIds.length > 0) {
+        await NotificationRepository.updateNotification({
+          filters: priorMoveFilters,
+          data: { message_read: true },
+        });
+
+        await NotificationService.notifyAll(
+          {
+            project,
+            sender: user._id,
+            receiver: moveReceiverIds,
+            section: sections.TOOLS,
+            tool: DRIVE_TOOL,
+            unit: DRIVE_UNIT_FILE,
+            action: 'drive_file_moved',
+            reference_id: moveNotifLevels.reference_id,
+            level_1: moveNotifLevels.level_1,
+            level_2: moveNotifLevels.level_2,
+            level_3: moveNotifLevels.level_3,
+            levels: moveNotifLevels.levels,
+            reference_data: {
+              file_id: toIdString(movedFile._id),
+              file_name: movedFile.file_name,
+              folder_id: movedFile.folder_id ? toIdString(movedFile.folder_id) : null,
+              target_folder_id: movedTargetFolderId,
+              read_notification_ids: priorReadIds.filter(Boolean),
+            },
+          },
+          { save: false, silent: true },
+          socketClient,
+        );
+      }
+    } catch (err) {
+      console.error('[moveFile_silent_mark_failed]:', err.message);
+    }
+
     await NotificationService.notifyAll(
       {
         project,
