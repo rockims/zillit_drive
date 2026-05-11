@@ -290,6 +290,7 @@ const createFolder = async ({ user, project, device, body }) => {
   // "Shared with Me". Wrapped in try/catch — if receiver resolution fails,
   // at minimum the creator still gets the event (multi-device sync).
   let folderEventReceivers = [user._id];
+  let notifyReceivers = [];
   try {
     const [parentReceivers, ownAclReceivers] = await Promise.all([
       folder.parent_folder_id
@@ -302,8 +303,55 @@ const createFolder = async ({ user, project, device, body }) => {
       }),
     ]);
     folderEventReceivers = [user._id, ...parentReceivers, ...ownAclReceivers];
+    // notifyAll receivers = same union but EXCLUDING the creator (creator is
+    // the actor and shouldn't be notified about their own action).
+    notifyReceivers = [...new Set([
+      ...parentReceivers.map((id) => toIdString(id)).filter(Boolean),
+      ...ownAclReceivers.map((id) => toIdString(id)).filter(Boolean),
+    ])];
   } catch (err) {
     console.error('[createFolder] receiver resolution failed:', err.message);
+  }
+
+  // Send notification:save to recipients so badges actually appear on their
+  // side. Previously only the admin socket event (drive:folder:created) was
+  // emitted — receivers saw the new folder appear in real-time via the
+  // "observer" event but no badge was created because no notification was
+  // saved. Mirrors the createFile / completeUpload pattern.
+  if (notifyReceivers.length > 0) {
+    try {
+      const folderCreateLevels = await DriveNotificationReceivers.buildNotificationLevels({
+        project,
+        folderId: folder.parent_folder_id,
+        itemId: folder._id,
+      });
+      await NotificationService.notifyAll(
+        {
+          project,
+          sender: user._id,
+          receiver: notifyReceivers,
+          section: sections.TOOLS,
+          tool: DRIVE_TOOL,
+          unit: DRIVE_UNIT_FOLDER,
+          action: 'drive_folder_created',
+          reference_id: folderCreateLevels.reference_id,
+          level_1: folderCreateLevels.level_1,
+          level_2: folderCreateLevels.level_2,
+          level_3: folderCreateLevels.level_3,
+          levels: folderCreateLevels.levels,
+          reference_data: {
+            folder_id: toIdString(folder._id),
+            folder_name: folder.folder_name,
+            parent_folder_id: folder.parent_folder_id ? toIdString(folder.parent_folder_id) : null,
+          },
+          message: `New folder "${folder.folder_name}" created`,
+        },
+        { notify: true, save: true },
+        socketClient,
+      );
+    } catch (notifErr) {
+      console.error('[createFolder] notification dispatch failed:', notifErr.message);
+    }
   }
 
   socketClient('__admin_events__', {
