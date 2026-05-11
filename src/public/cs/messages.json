@@ -106,5 +106,7 @@
   "drive_file_moved": "Soubor Drive přesunut.",
   "drive_file_moved_message": "Soubor Drive přesunul {{user_name}}.",
   "drive_folder_updated": "Složka Drive aktualizována.",
-  "drive_folder_updated_message": "Složku Drive aktualizoval {{user_name}}."
+  "drive_folder_updated_message": "Složku Drive aktualizoval {{user_name}}.",
+  "drive_my_drive_label": "Můj disk",
+  "drive_shared_with_me_label": "Sdíleno se mnou"
 }

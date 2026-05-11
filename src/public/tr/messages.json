@@ -106,5 +106,7 @@
   "drive_file_moved": "Drive dosyası taşındı.",
   "drive_file_moved_message": "Bir Drive dosyası {{user_name}} tarafından taşındı.",
   "drive_folder_updated": "Drive klasörü güncellendi.",
-  "drive_folder_updated_message": "Bir Drive klasörü {{user_name}} tarafından güncellendi."
+  "drive_folder_updated_message": "Bir Drive klasörü {{user_name}} tarafından güncellendi.",
+  "drive_my_drive_label": "Drive'ım",
+  "drive_shared_with_me_label": "Benimle paylaşılanlar"
 }

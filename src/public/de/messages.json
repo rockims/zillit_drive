@@ -106,5 +106,7 @@
   "drive_file_moved": "Drive-Datei verschoben.",
   "drive_file_moved_message": "Eine Drive-Datei wurde von {{user_name}} verschoben.",
   "drive_folder_updated": "Drive-Ordner aktualisiert.",
-  "drive_folder_updated_message": "Ein Drive-Ordner wurde von {{user_name}} aktualisiert."
+  "drive_folder_updated_message": "Ein Drive-Ordner wurde von {{user_name}} aktualisiert.",
+  "drive_my_drive_label": "Mein Laufwerk",
+  "drive_shared_with_me_label": "Mit mir geteilt"
 }

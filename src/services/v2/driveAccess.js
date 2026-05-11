@@ -596,14 +596,12 @@ const setFolderAccessList = async ({
           data: { message_read: true },
         });
 
-        await NotificationService.notifyAll(
-          {
+        await DriveNotificationReceivers.notifyAllByView({
+          payload: {
             project,
             sender: user._id,
-            receiver: newReceiverIds,
             section: sections.TOOLS,
             tool: DRIVE_TOOL,
-            unit: DRIVE_UNIT_FOLDER,
             action: 'drive_folder_shared',
             reference_id: shareLevels.reference_id,
             level_1: shareLevels.level_1,
@@ -616,19 +614,22 @@ const setFolderAccessList = async ({
               read_notification_ids: priorReadIds.filter(Boolean),
             },
           },
-          { save: false, silent: true },
+          receivers: newReceiverIds,
+          settings: { save: false, silent: true },
           socketClient,
-        );
+          project,
+          level_1: shareLevels.level_1,
+          reference_id: shareLevels.reference_id,
+          isFile: false,
+        });
       }
 
-      await NotificationService.notifyAll(
-        {
+      await DriveNotificationReceivers.notifyAllByView({
+        payload: {
           project,
           sender: user._id,
-          receiver: newReceiverIds,
           section: sections.TOOLS,
           tool: DRIVE_TOOL,
-          unit: DRIVE_UNIT_FOLDER,
           action: 'drive_folder_shared',
           reference_id: shareLevels.reference_id,
           level_1: shareLevels.level_1,
@@ -641,9 +642,14 @@ const setFolderAccessList = async ({
           },
           message: `Folder "${folder.folder_name}" shared with you`,
         },
-        { notify: true, save: true },
+        receivers: newReceiverIds,
+        settings: { notify: true, save: true },
         socketClient,
-      );
+        project,
+        level_1: shareLevels.level_1,
+        reference_id: shareLevels.reference_id,
+        isFile: false,
+      });
     } catch (notifErr) {
       console.error('[driveAccess] Folder share notification error:', notifErr.message);
     }
@@ -684,14 +690,17 @@ const setFolderAccessList = async ({
           data: { message_read: true },
         });
 
-        await NotificationService.notifyAll(
-          {
+        // Revoke silent-mark: use the folder's parent (or 'root') for the
+        // ancestry anchor so view classification still works for receivers
+        // who may now lack access. Result is still a silent badge clear,
+        // never a fresh badge — that's the intent.
+        const folderParentId = folder.parent_folder_id ? toIdString(folder.parent_folder_id) : 'root';
+        await DriveNotificationReceivers.notifyAllByView({
+          payload: {
             project,
             sender: user._id,
-            receiver: revokedUserIds,
             section: sections.TOOLS,
             tool: DRIVE_TOOL,
-            unit: DRIVE_UNIT_FOLDER,
             action: 'drive_folder_shared',
             reference_id: toIdString(folder._id),
             reference_data: {
@@ -700,9 +709,14 @@ const setFolderAccessList = async ({
               read_notification_ids: revokedReadIds.filter(Boolean),
             },
           },
-          { save: false, silent: true },
+          receivers: revokedUserIds,
+          settings: { save: false, silent: true },
           socketClient,
-        );
+          project,
+          level_1: folderParentId,
+          reference_id: toIdString(folder._id),
+          isFile: false,
+        });
       }
     } catch (err) {
       console.error('[folder_access_revoke_silent_failed]:', err.message);

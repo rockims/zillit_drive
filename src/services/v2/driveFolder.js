@@ -325,14 +325,12 @@ const createFolder = async ({ user, project, device, body }) => {
         folderId: folder.parent_folder_id,
         itemId: folder._id,
       });
-      await NotificationService.notifyAll(
-        {
+      await DriveNotificationReceivers.notifyAllByView({
+        payload: {
           project,
           sender: user._id,
-          receiver: notifyReceivers,
           section: sections.TOOLS,
           tool: DRIVE_TOOL,
-          unit: DRIVE_UNIT_FOLDER,
           action: 'drive_folder_created',
           reference_id: folderCreateLevels.reference_id,
           level_1: folderCreateLevels.level_1,
@@ -346,9 +344,14 @@ const createFolder = async ({ user, project, device, body }) => {
           },
           message: `New folder "${folder.folder_name}" created`,
         },
-        { notify: true, save: true },
+        receivers: notifyReceivers,
+        settings: { notify: true, save: true },
         socketClient,
-      );
+        project,
+        level_1: folderCreateLevels.level_1,
+        reference_id: folderCreateLevels.reference_id,
+        isFile: false,
+      });
     } catch (notifErr) {
       console.error('[createFolder] notification dispatch failed:', notifErr.message);
     }
@@ -1028,14 +1031,12 @@ const updateFolder = async ({ user, project, device, params, body }) => {
   ]);
 
   if (folderUpdateReceiverIds.length > 0) {
-    await NotificationService.notifyAll(
-      {
+    await DriveNotificationReceivers.notifyAllByView({
+      payload: {
         project,
         sender: user._id,
-        receiver: folderUpdateReceiverIds,
         section: sections.TOOLS,
         tool: DRIVE_TOOL,
-        unit: DRIVE_UNIT_FOLDER,
         action: 'drive_folder_updated',
         reference_id: folderUpdateLevels.reference_id,
         level_1: folderUpdateLevels.level_1,
@@ -1049,9 +1050,14 @@ const updateFolder = async ({ user, project, device, params, body }) => {
         },
         message: `Folder "${updatedFolder.folder_name}" updated`,
       },
-      { notify: true, save: true },
+      receivers: folderUpdateReceiverIds,
+      settings: { notify: true, save: true },
       socketClient,
-    );
+      project,
+      level_1: folderUpdateLevels.level_1,
+      reference_id: folderUpdateLevels.reference_id,
+      isFile: false,
+    });
   }
 
   socketClient('__admin_events__', {
@@ -1151,14 +1157,12 @@ const deleteFolder = async ({ user, project, device, params }) => {
   ]);
 
   if (folderDeleteReceiverIds.length > 0) {
-    await NotificationService.notifyAll(
-      {
+    await DriveNotificationReceivers.notifyAllByView({
+      payload: {
         project,
         sender: user._id,
-        receiver: folderDeleteReceiverIds,
         section: sections.TOOLS,
         tool: DRIVE_TOOL,
-        unit: DRIVE_UNIT_FOLDER,
         action: 'drive_folder_deleted',
         reference_id: folderDeleteLevels.reference_id,
         level_1: folderDeleteLevels.level_1,
@@ -1172,9 +1176,14 @@ const deleteFolder = async ({ user, project, device, params }) => {
         },
         message: `Folder "${folder.folder_name}" deleted`,
       },
-      { notify: true, save: true },
+      receivers: folderDeleteReceiverIds,
+      settings: { notify: true, save: true },
       socketClient,
-    );
+      project,
+      level_1: folderDeleteLevels.level_1,
+      reference_id: folderDeleteLevels.reference_id,
+      isFile: false,
+    });
   }
 
   socketClient('__admin_events__', {
@@ -1460,14 +1469,12 @@ const moveFolder = async ({ user, project, device, params, body }) => {
           data: { message_read: true },
         });
 
-        await NotificationService.notifyAll(
-          {
+        await DriveNotificationReceivers.notifyAllByView({
+          payload: {
             project,
             sender: user._id,
-            receiver: allReceiverIds,
             section: sections.TOOLS,
             tool: DRIVE_TOOL,
-            unit: DRIVE_UNIT_FOLDER,
             action: 'drive_folder_moved',
             reference_id: moveNotifLevels.reference_id,
             level_1: moveNotifLevels.level_1,
@@ -1482,19 +1489,22 @@ const moveFolder = async ({ user, project, device, params, body }) => {
               read_notification_ids: priorReadIds.filter(Boolean),
             },
           },
-          { save: false, silent: true },
+          receivers: allReceiverIds,
+          settings: { save: false, silent: true },
           socketClient,
-        );
+          project,
+          level_1: moveNotifLevels.level_1,
+          reference_id: moveNotifLevels.reference_id,
+          isFile: false,
+        });
       }
 
-      await NotificationService.notifyAll(
-        {
+      await DriveNotificationReceivers.notifyAllByView({
+        payload: {
           project,
           sender: user._id,
-          receiver: allReceiverIds,
           section: sections.TOOLS,
           tool: DRIVE_TOOL,
-          unit: DRIVE_UNIT_FOLDER,
           action: 'drive_folder_moved',
           reference_id: moveNotifLevels.reference_id,
           level_1: moveNotifLevels.level_1,
@@ -1509,9 +1519,14 @@ const moveFolder = async ({ user, project, device, params, body }) => {
           },
           message: `Folder "${updatedFolder.folder_name}" moved`,
         },
-        { notify: true, save: true },
+        receivers: allReceiverIds,
+        settings: { notify: true, save: true },
         socketClient,
-      );
+        project,
+        level_1: moveNotifLevels.level_1,
+        reference_id: moveNotifLevels.reference_id,
+        isFile: false,
+      });
     }
   } catch (err) {
     // Notification path is non-fatal — the move itself already succeeded.

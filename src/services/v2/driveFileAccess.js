@@ -612,14 +612,12 @@ const setFileAccessList = async ({ user, project, fileId, entries }) => {
           data: { message_read: true },
         });
 
-        await NotificationService.notifyAll(
-          {
+        await DriveNotificationReceivers.notifyAllByView({
+          payload: {
             project,
             sender: user._id,
-            receiver: newReceiverIds,
             section: sections.TOOLS,
             tool: DRIVE_TOOL,
-            unit: DRIVE_UNIT_FILE,
             action: 'drive_file_shared',
             reference_id: shareLevels.reference_id,
             level_1: shareLevels.level_1,
@@ -633,19 +631,22 @@ const setFileAccessList = async ({ user, project, fileId, entries }) => {
               read_notification_ids: priorReadIds.filter(Boolean),
             },
           },
-          { save: false, silent: true },
+          receivers: newReceiverIds,
+          settings: { save: false, silent: true },
           socketClient,
-        );
+          project,
+          level_1: shareLevels.level_1,
+          reference_id: shareLevels.reference_id,
+          isFile: true,
+        });
       }
 
-      await NotificationService.notifyAll(
-        {
+      await DriveNotificationReceivers.notifyAllByView({
+        payload: {
           project,
           sender: user._id,
-          receiver: newReceiverIds,
           section: sections.TOOLS,
           tool: DRIVE_TOOL,
-          unit: DRIVE_UNIT_FILE,
           action: 'drive_file_shared',
           reference_id: shareLevels.reference_id,
           level_1: shareLevels.level_1,
@@ -659,9 +660,14 @@ const setFileAccessList = async ({ user, project, fileId, entries }) => {
           },
           message: `File "${file.file_name}" shared with you`,
         },
-        { notify: true, save: true },
+        receivers: newReceiverIds,
+        settings: { notify: true, save: true },
         socketClient,
-      );
+        project,
+        level_1: shareLevels.level_1,
+        reference_id: shareLevels.reference_id,
+        isFile: true,
+      });
     } catch (err) {
       console.error('[file_access_notification_failed]:', err.message);
     }
@@ -702,14 +708,18 @@ const setFileAccessList = async ({ user, project, fileId, entries }) => {
           data: { message_read: true },
         });
 
-        await NotificationService.notifyAll(
-          {
+        // Revoke silent-mark: receivers may now lack access, so build the
+        // ancestry levels from the *file's current folder* so the unit
+        // classification still works. The fact that we route by view is
+        // fine — for the revoked user, the badge is being cleared anyway,
+        // not added.
+        const fileFolderId = file.folder_id ? toIdString(file.folder_id) : null;
+        await DriveNotificationReceivers.notifyAllByView({
+          payload: {
             project,
             sender: user._id,
-            receiver: revokedUserIds,
             section: sections.TOOLS,
             tool: DRIVE_TOOL,
-            unit: DRIVE_UNIT_FILE,
             action: 'drive_file_shared',
             reference_id: toIdString(file._id),
             reference_data: {
@@ -718,9 +728,14 @@ const setFileAccessList = async ({ user, project, fileId, entries }) => {
               read_notification_ids: revokedReadIds.filter(Boolean),
             },
           },
-          { save: false, silent: true },
+          receivers: revokedUserIds,
+          settings: { save: false, silent: true },
           socketClient,
-        );
+          project,
+          level_1: fileFolderId || 'root',
+          reference_id: toIdString(file._id),
+          isFile: true,
+        });
       }
     } catch (err) {
       console.error('[file_access_revoke_silent_failed]:', err.message);

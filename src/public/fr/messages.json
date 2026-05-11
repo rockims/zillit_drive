@@ -106,5 +106,7 @@
   "drive_file_moved": "Fichier Drive déplacé.",
   "drive_file_moved_message": "Un fichier Drive a été déplacé par {{user_name}}.",
   "drive_folder_updated": "Dossier Drive mis à jour.",
-  "drive_folder_updated_message": "Un dossier Drive a été mis à jour par {{user_name}}."
+  "drive_folder_updated_message": "Un dossier Drive a été mis à jour par {{user_name}}.",
+  "drive_my_drive_label": "Mon Drive",
+  "drive_shared_with_me_label": "Partagés avec moi"
 }

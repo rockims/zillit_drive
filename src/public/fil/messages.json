@@ -106,5 +106,7 @@
   "drive_file_moved": "Inilipat ang Drive file.",
   "drive_file_moved_message": "Inilipat ni {{user_name}} ang isang Drive file.",
   "drive_folder_updated": "Na-update ang Drive folder.",
-  "drive_folder_updated_message": "Na-update ni {{user_name}} ang isang Drive folder."
+  "drive_folder_updated_message": "Na-update ni {{user_name}} ang isang Drive folder.",
+  "drive_my_drive_label": "Aking Drive",
+  "drive_shared_with_me_label": "Ibinahagi sa akin"
 }

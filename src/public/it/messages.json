@@ -106,5 +106,7 @@
   "drive_file_moved": "File Drive spostato.",
   "drive_file_moved_message": "Un file Drive è stato spostato da {{user_name}}.",
   "drive_folder_updated": "Cartella Drive aggiornata.",
-  "drive_folder_updated_message": "Una cartella Drive è stata aggiornata da {{user_name}}."
+  "drive_folder_updated_message": "Una cartella Drive è stata aggiornata da {{user_name}}.",
+  "drive_my_drive_label": "Il mio Drive",
+  "drive_shared_with_me_label": "Condivisi con me"
 }

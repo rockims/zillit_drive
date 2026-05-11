@@ -380,14 +380,12 @@ const completeUpload = async ({ user, project, device, params, body }) => {
         folderId: session.folder_id,
         itemId: file._id,
       });
-      await NotificationService.notifyAll(
-        {
+      await DriveNotificationReceivers.notifyAllByView({
+        payload: {
           project,
           sender: file.created_by,
-          receiver: allReceiverIds,
           section: sections.TOOLS,
           tool: DRIVE_TOOL,
-          unit: DRIVE_UNIT_FILE,
           action: 'drive_file_uploaded',
           reference_id: uploadLevels.reference_id,
           level_1: uploadLevels.level_1,
@@ -401,9 +399,14 @@ const completeUpload = async ({ user, project, device, params, body }) => {
           },
           message: `New file "${file.file_name}" uploaded`,
         },
-        { notify: true, save: true },
+        receivers: allReceiverIds,
+        settings: { notify: true, save: true },
         socketClient,
-      );
+        project,
+        level_1: uploadLevels.level_1,
+        reference_id: uploadLevels.reference_id,
+        isFile: true,
+      });
     } catch (notifErr) {
       console.error('[driveUpload] Upload-complete notification error:', notifErr.message);
     }

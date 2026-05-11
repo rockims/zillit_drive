@@ -106,5 +106,7 @@
   "drive_file_moved": "Drive-bestand verplaatst.",
   "drive_file_moved_message": "Een Drive-bestand is verplaatst door {{user_name}}.",
   "drive_folder_updated": "Drive-map bijgewerkt.",
-  "drive_folder_updated_message": "Een Drive-map is bijgewerkt door {{user_name}}."
+  "drive_folder_updated_message": "Een Drive-map is bijgewerkt door {{user_name}}.",
+  "drive_my_drive_label": "Mijn Drive",
+  "drive_shared_with_me_label": "Gedeeld met mij"
 }
