@@ -370,40 +370,41 @@ const completeUpload = async ({ user, project, device, params, body }) => {
   const allReceiverIds = [...new Set([...accessUserIds, ...folderAccessUserIds])];
   const folderId = session.folder_id ? session.folder_id.toString() : null;
   if (allReceiverIds.length > 0) {
-    // Build ancestor-chain levels from the file's parent folder — matches the single-shot
-    // createFile path and the file CRUD paths for consistent client routing. Wrapped in
-    // try/catch so FCM/levels failures never 500 a successful multipart upload completion
-    // (the DB file record is already created above this block).
+    // ZL-18798: route badge by tab via level_1 sub-unit. Need parent folder's
+    // created_by to know if a receiver owns the folder (My Drive) or is a
+    // sharee (Shared with Me). Wrapped in try/catch — never 500 a successful
+    // multipart upload completion on FCM failure.
     try {
-      const uploadLevels = await DriveNotificationReceivers.buildNotificationLevels({
+      let parentFolderOwnerId = null;
+      if (session.folder_id) {
+        const DriveFolderRepo = (await import('../../repositories/v2/driveFolder.js')).default;
+        const parentFolder = await DriveFolderRepo.getFolder({
+          filters: {
+            _id: session.folder_id,
+            project_id: project._id,
+            deleted_on: 0,
+          },
+        });
+        parentFolderOwnerId = parentFolder?.created_by || null;
+      }
+
+      await DriveNotificationReceivers.notifyAllTabRouted({
         project,
+        actor: { _id: file.created_by },
+        receiverIds: allReceiverIds,
+        parentFolderOwnerId,
         folderId: session.folder_id,
         itemId: file._id,
-      });
-      await NotificationService.notifyAll(
-        {
-          project,
-          sender: file.created_by,
-          receiver: allReceiverIds,
-          section: sections.TOOLS,
-          tool: DRIVE_TOOL,
-          unit: DRIVE_UNIT_FILE,
-          action: 'drive_file_uploaded',
-          reference_id: uploadLevels.reference_id,
-          level_1: uploadLevels.level_1,
-          level_2: uploadLevels.level_2,
-          level_3: uploadLevels.level_3,
-          levels: uploadLevels.levels,
-          reference_data: {
-            file_id: toIdString(file._id),
-            file_name: file.file_name,
-            folder_id: folderId,
-          },
-          message: `New file "${file.file_name}" uploaded`,
+        unit: DRIVE_UNIT_FILE,
+        action: 'drive_file_uploaded',
+        message: `New file "${file.file_name}" uploaded`,
+        referenceData: {
+          file_id: toIdString(file._id),
+          file_name: file.file_name,
+          folder_id: folderId,
         },
-        { notify: true, save: true },
         socketClient,
-      );
+      });
     } catch (notifErr) {
       console.error('[driveUpload] Upload-complete notification error:', notifErr.message);
     }

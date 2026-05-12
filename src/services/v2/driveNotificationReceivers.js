@@ -1,7 +1,11 @@
 import mongoose from 'mongoose';
 import DriveFolder from 'zillit-libs/mongo-models-v2/DriveFolder';
+import NotificationService from 'zillit-libs/services-v2/notification';
 import DriveFolderAccessRepository from '../../repositories/v2/driveFolderAccess.js';
 import DriveFileAccessRepository from '../../repositories/v2/driveFileAccess.js';
+
+const { sections, units } = NotificationService.NotificationConstants;
+const DRIVE_TOOL = 'drive_label';
 
 const toIdString = (value) => (value ? value.toString() : null);
 
@@ -197,8 +201,166 @@ const getMoveReceivers = async ({ project, actorId, sourceFolderId, targetFolder
   return [...new Set([...sourceUsers, ...targetUsers])];
 };
 
+/**
+ * ZL-18798: wrap buildNotificationLevels so the FE flat-badge schema can
+ * route the bell row to the right tab.
+ *
+ * FE (libs PR #2457) routes by level_1 = sub-unit name. Drive previously
+ * used level_1 for the root ancestor folder_id (subtree rollup), which
+ * didn't match any known sub-unit → badges fell through both My Drive and
+ * Shared with Me tabs.
+ *
+ * This helper shifts every ancestor level down by one and stamps the
+ * tab sub-unit into level_1:
+ *
+ *   level_1 = tabSubUnit ('my_drive_unit' | 'shared_with_me_unit')
+ *   level_2 = was level_1 (root ancestor folder_id)
+ *   level_3 = was level_2 (second-level folder_id)
+ *   levels  = ['level_4:was_level_3', 'level_5:was_level_4 entry', ...]
+ *
+ * Subtree rollup still works inside each tab — the FE just keys off
+ * level_2/level_3/levels[] instead of level_1.
+ *
+ * @param {Object} params
+ * @param {Object} params.project — project ({_id})
+ * @param {string} params.folderId — parent folder of the item (or null for root)
+ * @param {string} params.itemId — file_id or folder_id being acted on
+ * @param {string} params.tabSubUnit — units.DRIVE_MY or units.DRIVE_SHARED_WITH_ME
+ */
+const buildTabRoutedLevels = async ({
+  project, folderId, itemId, tabSubUnit,
+}) => {
+  const base = await buildNotificationLevels({ project, folderId, itemId });
+
+  const shifted = {
+    reference_id: base.reference_id,
+    level_1: tabSubUnit,
+    level_2: base.level_1 && base.level_1 !== 'root' ? base.level_1 : null,
+    level_3: base.level_2,
+    levels: [],
+  };
+
+  if (base.level_3) {
+    shifted.levels.push(`level_4:${base.level_3}`);
+  }
+
+  base.levels.forEach((lvlStr) => {
+    const colonAt = lvlStr.indexOf(':');
+    if (colonAt < 0) return;
+    const label = lvlStr.slice(0, colonAt);
+    const id = lvlStr.slice(colonAt + 1);
+    const n = parseInt(label.replace('level_', ''), 10);
+    if (!Number.isFinite(n)) return;
+    shifted.levels.push(`level_${n + 1}:${id}`);
+  });
+
+  return shifted;
+};
+
+/**
+ * ZL-18798: split a list of receiver user_ids into [owners, sharees]
+ * based on who owns the relevant item.
+ *
+ * Owners go to the "My Drive" tab; sharees go to "Shared with Me".
+ *
+ * @param {Array<string>} receiverIds — full receiver list (already excludes actor)
+ * @param {string|null} ownerId — the owning user_id (folder.created_by for nested
+ *   items, the folder.created_by for folder events themselves, or null for root
+ *   files where every receiver is a sharee).
+ * @returns {{ owners: string[], sharees: string[] }}
+ */
+const splitReceiversByOwnership = (receiverIds = [], ownerId = null) => {
+  if (!ownerId) {
+    return { owners: [], sharees: [...receiverIds] };
+  }
+  const ownerStr = toIdString(ownerId);
+  const owners = [];
+  const sharees = [];
+  receiverIds.forEach((rid) => {
+    if (toIdString(rid) === ownerStr) owners.push(rid);
+    else sharees.push(rid);
+  });
+  return { owners, sharees };
+};
+
+/**
+ * ZL-18798: dispatch a drive notification to receivers, splitting them
+ * into "My Drive" and "Shared with Me" tabs by ownership and firing the
+ * appropriate sub-unit per group.
+ *
+ * Each call site is one logical event ("file uploaded", "folder updated", etc.)
+ * but on the wire it can dispatch up to TWO NotificationService.notifyAll
+ * calls — one per tab — because owners (folder.created_by === receiver)
+ * see the badge in their My Drive tab, sharees see it in Shared with Me.
+ *
+ * For SHARE events (drive_*_shared) every receiver is a new sharee by
+ * definition. Caller can simply pass parentFolderOwnerId=null so all
+ * receivers land in Shared with Me — no split needed.
+ *
+ * @param {Object} args
+ * @param {Object} args.project
+ * @param {Object} args.actor — user performing the action ({_id})
+ * @param {Array<string|ObjectId>} args.receiverIds — already excludes actor
+ * @param {string|null} args.parentFolderOwnerId — folder.created_by; null
+ *   for root-level files or share events (all receivers → sharees).
+ * @param {string|null} args.folderId — parent folder_id (or null for root)
+ * @param {string} args.itemId — file_id or folder_id being acted on
+ * @param {string} args.unit — units.DRIVE_FILE or units.DRIVE_FOLDER (well,
+ *   currently drive_file_label / drive_folder_label — kept as the
+ *   tile-level unit; level_1 is the tab discriminator).
+ * @param {string} args.action — e.g. 'drive_file_uploaded'
+ * @param {string} args.message
+ * @param {Object} args.referenceData
+ * @param {Function} args.socketClient
+ * @returns {Promise<void>}
+ */
+const notifyAllTabRouted = async ({
+  project, actor, receiverIds, parentFolderOwnerId,
+  folderId, itemId, unit, action, message, referenceData,
+  socketClient, options = { notify: true, save: true },
+}) => {
+  if (!Array.isArray(receiverIds) || receiverIds.length === 0) return;
+
+  const { owners, sharees } = splitReceiversByOwnership(receiverIds, parentFolderOwnerId);
+
+  const fire = async (receivers, tabSubUnit) => {
+    if (receivers.length === 0) return null;
+    const levels = await buildTabRoutedLevels({
+      project, folderId, itemId, tabSubUnit,
+    });
+    const payload = {
+      project,
+      sender: actor._id,
+      receiver: receivers,
+      section: sections.TOOLS,
+      tool: DRIVE_TOOL,
+      unit,
+      action,
+      reference_id: levels.reference_id,
+      level_1: levels.level_1,
+      level_2: levels.level_2,
+      level_3: levels.level_3,
+      levels: levels.levels,
+      reference_data: referenceData,
+    };
+    // Silent-mark notifications use { save: false, silent: true } and omit
+    // the visible message; real notify calls use { notify: true, save: true }
+    // with a message. Only add the message when it's a real notify.
+    if (message) payload.message = message;
+    return NotificationService.notifyAll(payload, options, socketClient);
+  };
+
+  await Promise.all([
+    fire(owners, units.DRIVE_MY),
+    fire(sharees, units.DRIVE_SHARED_WITH_ME),
+  ]);
+};
+
 export default {
   buildNotificationLevels,
+  buildTabRoutedLevels,
+  splitReceiversByOwnership,
+  notifyAllTabRouted,
   getFolderReceivers,
   getFileReceivers,
   getMoveReceivers,
