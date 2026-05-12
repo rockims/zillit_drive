@@ -320,35 +320,28 @@ const createFolder = async ({ user, project, device, body }) => {
   // saved. Mirrors the createFile / completeUpload pattern.
   if (notifyReceivers.length > 0) {
     try {
-      const folderCreateLevels = await DriveNotificationReceivers.buildNotificationLevels({
+      // ZL-18798: route badge to My Drive / Shared with Me tab via level_1
+      // sub-unit. For createFolder, the relevant owner is the PARENT folder's
+      // owner (the new folder is INSIDE that parent on the receiver's side).
+      // Root-level folder → parent.created_by = null → all receivers go to
+      // Shared with Me (they were given access via explicit share).
+      await DriveNotificationReceivers.notifyAllTabRouted({
         project,
+        actor: user,
+        receiverIds: notifyReceivers,
+        parentFolderOwnerId: parentFolder?.created_by || null,
         folderId: folder.parent_folder_id,
         itemId: folder._id,
-      });
-      await NotificationService.notifyAll(
-        {
-          project,
-          sender: user._id,
-          receiver: notifyReceivers,
-          section: sections.TOOLS,
-          tool: DRIVE_TOOL,
-          unit: DRIVE_UNIT_FOLDER,
-          action: 'drive_folder_created',
-          reference_id: folderCreateLevels.reference_id,
-          level_1: folderCreateLevels.level_1,
-          level_2: folderCreateLevels.level_2,
-          level_3: folderCreateLevels.level_3,
-          levels: folderCreateLevels.levels,
-          reference_data: {
-            folder_id: toIdString(folder._id),
-            folder_name: folder.folder_name,
-            parent_folder_id: folder.parent_folder_id ? toIdString(folder.parent_folder_id) : null,
-          },
-          message: `New folder "${folder.folder_name}" created`,
+        unit: DRIVE_UNIT_FOLDER,
+        action: 'drive_folder_created',
+        message: `New folder "${folder.folder_name}" created`,
+        referenceData: {
+          folder_id: toIdString(folder._id),
+          folder_name: folder.folder_name,
+          parent_folder_id: folder.parent_folder_id ? toIdString(folder.parent_folder_id) : null,
         },
-        { notify: true, save: true },
         socketClient,
-      );
+      });
     } catch (notifErr) {
       console.error('[createFolder] notification dispatch failed:', notifErr.message);
     }
@@ -1014,45 +1007,41 @@ const updateFolder = async ({ user, project, device, params, body }) => {
     });
   }
 
-  const [folderUpdateReceiverIds, folderUpdateLevels] = await Promise.all([
+  const [folderUpdateReceiverIds, parentFolderForUpdate] = await Promise.all([
     DriveNotificationReceivers.getFolderReceivers({
       project,
       actorId: user._id,
       folderId: updatedFolder._id,
     }),
-    DriveNotificationReceivers.buildNotificationLevels({
-      project,
-      folderId: updatedFolder.parent_folder_id,
-      itemId: updatedFolder._id,
-    }),
+    updatedFolder.parent_folder_id
+      ? _getFolderById({ project, folderId: updatedFolder.parent_folder_id })
+      : Promise.resolve(null),
   ]);
 
-  if (folderUpdateReceiverIds.length > 0) {
-    await NotificationService.notifyAll(
-      {
-        project,
-        sender: user._id,
-        receiver: folderUpdateReceiverIds,
-        section: sections.TOOLS,
-        tool: DRIVE_TOOL,
-        unit: DRIVE_UNIT_FOLDER,
-        action: 'drive_folder_updated',
-        reference_id: folderUpdateLevels.reference_id,
-        level_1: folderUpdateLevels.level_1,
-        level_2: folderUpdateLevels.level_2,
-        level_3: folderUpdateLevels.level_3,
-        levels: folderUpdateLevels.levels,
-        reference_data: {
-          folder_id: toIdString(updatedFolder._id),
-          folder_name: updatedFolder.folder_name,
-          parent_folder_id: updatedFolder.parent_folder_id ? toIdString(updatedFolder.parent_folder_id) : null,
-        },
-        message: `Folder "${updatedFolder.folder_name}" updated`,
-      },
-      { notify: true, save: true },
-      socketClient,
-    );
-  }
+  // ZL-18798: tab routing via level_1 sub-unit. For nested folder updates,
+  // the parent folder's owner gets My Drive (their folder, their subfolder).
+  // For root folder updates, the folder's own created_by is the relevant
+  // owner (no parent to inherit from).
+  const updateOwnerId = parentFolderForUpdate
+    ? parentFolderForUpdate.created_by
+    : updatedFolder.created_by;
+  await DriveNotificationReceivers.notifyAllTabRouted({
+    project,
+    actor: user,
+    receiverIds: folderUpdateReceiverIds,
+    parentFolderOwnerId: updateOwnerId,
+    folderId: updatedFolder.parent_folder_id,
+    itemId: updatedFolder._id,
+    unit: DRIVE_UNIT_FOLDER,
+    action: 'drive_folder_updated',
+    message: `Folder "${updatedFolder.folder_name}" updated`,
+    referenceData: {
+      folder_id: toIdString(updatedFolder._id),
+      folder_name: updatedFolder.folder_name,
+      parent_folder_id: updatedFolder.parent_folder_id ? toIdString(updatedFolder.parent_folder_id) : null,
+    },
+    socketClient,
+  });
 
   socketClient('__admin_events__', {
     event: 'drive:folder:updated',
@@ -1137,45 +1126,39 @@ const deleteFolder = async ({ user, project, device, params }) => {
     }),
   ]);
 
-  const [folderDeleteReceiverIds, folderDeleteLevels] = await Promise.all([
+  const [folderDeleteReceiverIds, parentFolderForDelete] = await Promise.all([
     DriveNotificationReceivers.getFolderReceivers({
       project,
       actorId: user._id,
       folderId: folder._id,
     }),
-    DriveNotificationReceivers.buildNotificationLevels({
-      project,
-      folderId: folder.parent_folder_id,
-      itemId: folder._id,
-    }),
+    folder.parent_folder_id
+      ? _getFolderById({ project, folderId: folder.parent_folder_id })
+      : Promise.resolve(null),
   ]);
 
-  if (folderDeleteReceiverIds.length > 0) {
-    await NotificationService.notifyAll(
-      {
-        project,
-        sender: user._id,
-        receiver: folderDeleteReceiverIds,
-        section: sections.TOOLS,
-        tool: DRIVE_TOOL,
-        unit: DRIVE_UNIT_FOLDER,
-        action: 'drive_folder_deleted',
-        reference_id: folderDeleteLevels.reference_id,
-        level_1: folderDeleteLevels.level_1,
-        level_2: folderDeleteLevels.level_2,
-        level_3: folderDeleteLevels.level_3,
-        levels: folderDeleteLevels.levels,
-        reference_data: {
-          folder_id: toIdString(folder._id),
-          folder_name: folder.folder_name,
-          parent_folder_id: folder.parent_folder_id ? toIdString(folder.parent_folder_id) : null,
-        },
-        message: `Folder "${folder.folder_name}" deleted`,
-      },
-      { notify: true, save: true },
-      socketClient,
-    );
-  }
+  // ZL-18798: tab routing — parent folder owner sees this delete in My Drive
+  // (their folder lost a child); root folder fallback uses folder.created_by.
+  const deleteOwnerId = parentFolderForDelete
+    ? parentFolderForDelete.created_by
+    : folder.created_by;
+  await DriveNotificationReceivers.notifyAllTabRouted({
+    project,
+    actor: user,
+    receiverIds: folderDeleteReceiverIds,
+    parentFolderOwnerId: deleteOwnerId,
+    folderId: folder.parent_folder_id,
+    itemId: folder._id,
+    unit: DRIVE_UNIT_FOLDER,
+    action: 'drive_folder_deleted',
+    message: `Folder "${folder.folder_name}" deleted`,
+    referenceData: {
+      folder_id: toIdString(folder._id),
+      folder_name: folder.folder_name,
+      parent_folder_id: folder.parent_folder_id ? toIdString(folder.parent_folder_id) : null,
+    },
+    socketClient,
+  });
 
   socketClient('__admin_events__', {
     event: 'drive:folder:deleted',
@@ -1414,19 +1397,12 @@ const moveFolder = async ({ user, project, device, params, body }) => {
   try {
     const sourceFolderId = folder.parent_folder_id ? toIdString(folder.parent_folder_id) : null;
     const movedTargetFolderId = target_folder_id || null;
-    const [moveReceiverIds, moveNotifLevels] = await Promise.all([
-      DriveNotificationReceivers.getMoveReceivers({
-        project,
-        actorId: user._id,
-        sourceFolderId,
-        targetFolderId: movedTargetFolderId,
-      }),
-      DriveNotificationReceivers.buildNotificationLevels({
-        project,
-        folderId: updatedFolder.parent_folder_id || updatedFolder._id,
-        itemId: updatedFolder._id,
-      }),
-    ]);
+    const moveReceiverIds = await DriveNotificationReceivers.getMoveReceivers({
+      project,
+      actorId: user._id,
+      sourceFolderId,
+      targetFolderId: movedTargetFolderId,
+    });
 
     // Also include direct sharees on the folder itself — they need to know
     // their shared folder moved even if they have no role on src/target.
@@ -1439,6 +1415,16 @@ const moveFolder = async ({ user, project, device, params, body }) => {
     ])).filter(Boolean);
 
     if (allReceiverIds.length > 0) {
+      // ZL-18798: tab routing — for moved folder, the relevant owner is the
+      // TARGET parent's owner (move lands the folder under the new parent).
+      // For root-level target, fall back to updatedFolder.created_by.
+      const targetParent = updatedFolder.parent_folder_id
+        ? await _getFolderById({ project, folderId: updatedFolder.parent_folder_id })
+        : null;
+      const movedOwnerId = targetParent
+        ? targetParent.created_by
+        : updatedFolder.created_by;
+
       // Silent-mark prior unread notifications for THIS folder. Their levels
       // reflect the pre-move ancestry and would otherwise produce stale
       // rollups in the FE BadgeDB cache.
@@ -1460,58 +1446,45 @@ const moveFolder = async ({ user, project, device, params, body }) => {
           data: { message_read: true },
         });
 
-        await NotificationService.notifyAll(
-          {
-            project,
-            sender: user._id,
-            receiver: allReceiverIds,
-            section: sections.TOOLS,
-            tool: DRIVE_TOOL,
-            unit: DRIVE_UNIT_FOLDER,
-            action: 'drive_folder_moved',
-            reference_id: moveNotifLevels.reference_id,
-            level_1: moveNotifLevels.level_1,
-            level_2: moveNotifLevels.level_2,
-            level_3: moveNotifLevels.level_3,
-            levels: moveNotifLevels.levels,
-            reference_data: {
-              folder_id: toIdString(updatedFolder._id),
-              folder_name: updatedFolder.folder_name,
-              source_parent_id: sourceFolderId,
-              target_parent_id: movedTargetFolderId,
-              read_notification_ids: priorReadIds.filter(Boolean),
-            },
-          },
-          { save: false, silent: true },
-          socketClient,
-        );
-      }
-
-      await NotificationService.notifyAll(
-        {
+        await DriveNotificationReceivers.notifyAllTabRouted({
           project,
-          sender: user._id,
-          receiver: allReceiverIds,
-          section: sections.TOOLS,
-          tool: DRIVE_TOOL,
+          actor: user,
+          receiverIds: allReceiverIds,
+          parentFolderOwnerId: movedOwnerId,
+          folderId: updatedFolder.parent_folder_id || updatedFolder._id,
+          itemId: updatedFolder._id,
           unit: DRIVE_UNIT_FOLDER,
           action: 'drive_folder_moved',
-          reference_id: moveNotifLevels.reference_id,
-          level_1: moveNotifLevels.level_1,
-          level_2: moveNotifLevels.level_2,
-          level_3: moveNotifLevels.level_3,
-          levels: moveNotifLevels.levels,
-          reference_data: {
+          referenceData: {
             folder_id: toIdString(updatedFolder._id),
             folder_name: updatedFolder.folder_name,
             source_parent_id: sourceFolderId,
             target_parent_id: movedTargetFolderId,
+            read_notification_ids: priorReadIds.filter(Boolean),
           },
-          message: `Folder "${updatedFolder.folder_name}" moved`,
+          socketClient,
+          options: { save: false, silent: true },
+        });
+      }
+
+      await DriveNotificationReceivers.notifyAllTabRouted({
+        project,
+        actor: user,
+        receiverIds: allReceiverIds,
+        parentFolderOwnerId: movedOwnerId,
+        folderId: updatedFolder.parent_folder_id || updatedFolder._id,
+        itemId: updatedFolder._id,
+        unit: DRIVE_UNIT_FOLDER,
+        action: 'drive_folder_moved',
+        message: `Folder "${updatedFolder.folder_name}" moved`,
+        referenceData: {
+          folder_id: toIdString(updatedFolder._id),
+          folder_name: updatedFolder.folder_name,
+          source_parent_id: sourceFolderId,
+          target_parent_id: movedTargetFolderId,
         },
-        { notify: true, save: true },
         socketClient,
-      );
+      });
     }
   } catch (err) {
     // Notification path is non-fatal — the move itself already succeeded.
