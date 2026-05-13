@@ -6,10 +6,14 @@ const initiateUpload = Joi.object({
     return err;
   }),
 
-  file_size_bytes: Joi.number().integer().min(1).max(10 * 1024 * 1024 * 1024).required().error((err) => {
-    err[0].message = 'file_size_bytes_validation';
-    return err;
-  }),
+  // Allow 0-byte files (industry-standard — Google Drive / Dropbox / OneDrive
+  // all accept them). 0-byte uploads bypass S3 multipart in initiateUpload
+  // and resolve directly via a synthetic completion. Max stays at 10 GB.
+  file_size_bytes: Joi.number().integer().min(0).max(10 * 1024 * 1024 * 1024).required()
+    .error((err) => {
+      err[0].message = 'file_size_bytes_validation';
+      return err;
+    }),
 
   folder_id: Joi.objectId().optional().allow(null).error((err) => {
     err[0].message = 'folder_id_validation';
@@ -44,6 +48,9 @@ const initiateUpload = Joi.object({
 });
 
 const completeUpload = Joi.object({
+  // Allow an empty parts array — 0-byte uploads finalize with no parts
+  // (initiateUpload skipped S3 multipart, so there's nothing to assemble).
+  // For non-zero uploads the service still rejects an empty parts array.
   parts: Joi.array()
     .items(
       Joi.object({
@@ -51,7 +58,7 @@ const completeUpload = Joi.object({
         etag: Joi.string().required(),
       }),
     )
-    .min(1)
+    .min(0)
     .required()
     .error((err) => {
       err[0].message = 'parts_validation';
