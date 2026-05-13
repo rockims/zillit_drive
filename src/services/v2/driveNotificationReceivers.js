@@ -202,21 +202,21 @@ const getMoveReceivers = async ({ project, actorId, sourceFolderId, targetFolder
 };
 
 /**
- * ZL-18798: wrap buildNotificationLevels so the FE flat-badge schema can
- * route the bell row to the right tab.
+ * ZL-18798 (v2 — schema swap per FE team feedback 2026-05-13): wrap
+ * buildNotificationLevels so the FE can route the bell row to the right tab.
  *
- * FE (libs PR #2457) routes by level_1 = sub-unit name. Drive previously
- * used level_1 for the root ancestor folder_id (subtree rollup), which
- * didn't match any known sub-unit → badges fell through both My Drive and
- * Shared with Me tabs.
+ * The FE (Vidya) requested the tab discriminator to live on the `unit`
+ * field — semantically "unit" means "sub-section of a tool" which maps
+ * cleanly to "My Drive" / "Shared with Me" sub-sections of the Drive
+ * tool. The kind of resource (file vs folder) moves to `level_1`.
  *
- * This helper shifts every ancestor level down by one and stamps the
- * tab sub-unit into level_1:
+ * New emitted schema:
  *
- *   level_1 = tabSubUnit ('my_drive_unit' | 'shared_with_me_unit')
- *   level_2 = was level_1 (root ancestor folder_id)
- *   level_3 = was level_2 (second-level folder_id)
- *   levels  = ['level_4:was_level_3', 'level_5:was_level_4 entry', ...]
+ *   unit    = 'my_drive_unit' | 'shared_with_me_unit'   ← tab discriminator
+ *   level_1 = 'drive_file_label' | 'drive_folder_label' ← resource kind
+ *   level_2 = root ancestor folder_id                   (was level_1 pre-fix)
+ *   level_3 = next-level folder_id                      (was level_2 pre-fix)
+ *   levels  = ['level_4:id', 'level_5:id', ...]         (shifted up by 1)
  *
  * Subtree rollup still works inside each tab — the FE just keys off
  * level_2/level_3/levels[] instead of level_1.
@@ -225,16 +225,17 @@ const getMoveReceivers = async ({ project, actorId, sourceFolderId, targetFolder
  * @param {Object} params.project — project ({_id})
  * @param {string} params.folderId — parent folder of the item (or null for root)
  * @param {string} params.itemId — file_id or folder_id being acted on
- * @param {string} params.tabSubUnit — units.DRIVE_MY or units.DRIVE_SHARED_WITH_ME
+ * @param {string} params.kindLabel — 'drive_file_label' or 'drive_folder_label'
+ *   (the resource kind that previously lived on `unit` pre-swap)
  */
 const buildTabRoutedLevels = async ({
-  project, folderId, itemId, tabSubUnit,
+  project, folderId, itemId, kindLabel,
 }) => {
   const base = await buildNotificationLevels({ project, folderId, itemId });
 
   const shifted = {
     reference_id: base.reference_id,
-    level_1: tabSubUnit,
+    level_1: kindLabel,
     level_2: base.level_1 && base.level_1 !== 'root' ? base.level_1 : null,
     level_3: base.level_2,
     levels: [],
@@ -284,14 +285,21 @@ const splitReceiversByOwnership = (receiverIds = [], ownerId = null) => {
 };
 
 /**
- * ZL-18798: dispatch a drive notification to receivers, splitting them
- * into "My Drive" and "Shared with Me" tabs by ownership and firing the
- * appropriate sub-unit per group.
+ * ZL-18798 (v2 — 2026-05-13 schema swap): dispatch a drive notification to
+ * receivers, splitting them into "My Drive" and "Shared with Me" tabs by
+ * ownership and firing the appropriate sub-unit per group.
  *
  * Each call site is one logical event ("file uploaded", "folder updated", etc.)
  * but on the wire it can dispatch up to TWO NotificationService.notifyAll
  * calls — one per tab — because owners (folder.created_by === receiver)
  * see the badge in their My Drive tab, sharees see it in Shared with Me.
+ *
+ * On the wire (per FE team request):
+ *   - `unit`    carries the tab discriminator (my_drive_unit / shared_with_me_unit)
+ *   - `level_1` carries the resource kind (drive_file_label / drive_folder_label)
+ * Callers continue to pass the resource kind as `unit` — the helper takes
+ * care of swapping it into `level_1` and stamping the tab discriminator
+ * into `unit` before emit. No call-site change needed.
  *
  * For SHARE events (drive_*_shared) every receiver is a new sharee by
  * definition. Caller can simply pass parentFolderOwnerId=null so all
@@ -305,9 +313,9 @@ const splitReceiversByOwnership = (receiverIds = [], ownerId = null) => {
  *   for root-level files or share events (all receivers → sharees).
  * @param {string|null} args.folderId — parent folder_id (or null for root)
  * @param {string} args.itemId — file_id or folder_id being acted on
- * @param {string} args.unit — units.DRIVE_FILE or units.DRIVE_FOLDER (well,
- *   currently drive_file_label / drive_folder_label — kept as the
- *   tile-level unit; level_1 is the tab discriminator).
+ * @param {string} args.unit — resource kind: drive_file_label or
+ *   drive_folder_label. Internally relocated to `level_1` of the emitted
+ *   payload (see helper docstring above).
  * @param {string} args.action — e.g. 'drive_file_uploaded'
  * @param {string} args.message
  * @param {Object} args.referenceData
@@ -323,10 +331,16 @@ const notifyAllTabRouted = async ({
 
   const { owners, sharees } = splitReceiversByOwnership(receiverIds, parentFolderOwnerId);
 
+  // Callers pass the resource kind (drive_file_label / drive_folder_label)
+  // as `unit`. Per FE-team feedback (Vidya, 2026-05-13) the tab
+  // discriminator must live on `unit`, so we relocate the kind to
+  // `level_1` and stamp the tab sub-unit into `unit` per receiver group.
+  const kindLabel = unit;
+
   const fire = async (receivers, tabSubUnit) => {
     if (receivers.length === 0) return null;
     const levels = await buildTabRoutedLevels({
-      project, folderId, itemId, tabSubUnit,
+      project, folderId, itemId, kindLabel,
     });
     const payload = {
       project,
@@ -334,7 +348,7 @@ const notifyAllTabRouted = async ({
       receiver: receivers,
       section: sections.TOOLS,
       tool: DRIVE_TOOL,
-      unit,
+      unit: tabSubUnit,
       action,
       reference_id: levels.reference_id,
       level_1: levels.level_1,
