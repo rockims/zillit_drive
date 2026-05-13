@@ -202,63 +202,6 @@ const getMoveReceivers = async ({ project, actorId, sourceFolderId, targetFolder
 };
 
 /**
- * ZL-18798 (v2 — schema swap per FE team feedback 2026-05-13): wrap
- * buildNotificationLevels so the FE can route the bell row to the right tab.
- *
- * The FE (Vidya) requested the tab discriminator to live on the `unit`
- * field — semantically "unit" means "sub-section of a tool" which maps
- * cleanly to "My Drive" / "Shared with Me" sub-sections of the Drive
- * tool. The kind of resource (file vs folder) moves to `level_1`.
- *
- * New emitted schema:
- *
- *   unit    = 'my_drive_unit' | 'shared_with_me_unit'   ← tab discriminator
- *   level_1 = 'drive_file_label' | 'drive_folder_label' ← resource kind
- *   level_2 = root ancestor folder_id                   (was level_1 pre-fix)
- *   level_3 = next-level folder_id                      (was level_2 pre-fix)
- *   levels  = ['level_4:id', 'level_5:id', ...]         (shifted up by 1)
- *
- * Subtree rollup still works inside each tab — the FE just keys off
- * level_2/level_3/levels[] instead of level_1.
- *
- * @param {Object} params
- * @param {Object} params.project — project ({_id})
- * @param {string} params.folderId — parent folder of the item (or null for root)
- * @param {string} params.itemId — file_id or folder_id being acted on
- * @param {string} params.kindLabel — 'drive_file_label' or 'drive_folder_label'
- *   (the resource kind that previously lived on `unit` pre-swap)
- */
-const buildTabRoutedLevels = async ({
-  project, folderId, itemId, kindLabel,
-}) => {
-  const base = await buildNotificationLevels({ project, folderId, itemId });
-
-  const shifted = {
-    reference_id: base.reference_id,
-    level_1: kindLabel,
-    level_2: base.level_1 && base.level_1 !== 'root' ? base.level_1 : null,
-    level_3: base.level_2,
-    levels: [],
-  };
-
-  if (base.level_3) {
-    shifted.levels.push(`level_4:${base.level_3}`);
-  }
-
-  base.levels.forEach((lvlStr) => {
-    const colonAt = lvlStr.indexOf(':');
-    if (colonAt < 0) return;
-    const label = lvlStr.slice(0, colonAt);
-    const id = lvlStr.slice(colonAt + 1);
-    const n = parseInt(label.replace('level_', ''), 10);
-    if (!Number.isFinite(n)) return;
-    shifted.levels.push(`level_${n + 1}:${id}`);
-  });
-
-  return shifted;
-};
-
-/**
  * ZL-18798: split a list of receiver user_ids into [owners, sharees]
  * based on who owns the relevant item.
  *
@@ -285,25 +228,36 @@ const splitReceiversByOwnership = (receiverIds = [], ownerId = null) => {
 };
 
 /**
- * ZL-18798 (v2 — 2026-05-13 schema swap): dispatch a drive notification to
- * receivers, splitting them into "My Drive" and "Shared with Me" tabs by
- * ownership and firing the appropriate sub-unit per group.
+ * ZL-18798 (v3 — 2026-05-13 final per Vivek + Vidya): dispatch a drive
+ * notification to receivers, splitting them into "My Drive" and "Shared
+ * with Me" tabs by ownership.
  *
- * Each call site is one logical event ("file uploaded", "folder updated", etc.)
- * but on the wire it can dispatch up to TWO NotificationService.notifyAll
- * calls — one per tab — because owners (folder.created_by === receiver)
- * see the badge in their My Drive tab, sharees see it in Shared with Me.
+ * Earlier iterations of this helper changed the on-wire `unit` /
+ * `level_1` contract to carry the tab discriminator. FE leads (Vivek
+ * iOS + Vidya Android) pushed back: "Please don't change the existing
+ * workflow. If you need to add anything new, manage it with a new key
+ * so there is no impact on current functionality." This version
+ * complies — the existing payload is left UNCHANGED and a new
+ * `reference_data.view` key is added to discriminate the tab.
  *
- * On the wire (per FE team request):
- *   - `unit`    carries the tab discriminator (my_drive_unit / shared_with_me_unit)
- *   - `level_1` carries the resource kind (drive_file_label / drive_folder_label)
- * Callers continue to pass the resource kind as `unit` — the helper takes
- * care of swapping it into `level_1` and stamping the tab discriminator
- * into `unit` before emit. No call-site change needed.
+ * On-wire payload (unchanged from pre-#69):
+ *   unit    = 'drive_file_label' | 'drive_folder_label'   (resource kind)
+ *   level_1 = root ancestor folder_id  (subtree rollup, unchanged)
+ *   level_2 = next-level folder_id
+ *   levels  = ['level_3:id', 'level_4:id', ...]
+ *
+ * New addition:
+ *   reference_data.view = 'my_drive_unit' | 'shared_with_me_unit'
+ *     ← tab discriminator; values match libs constants
+ *       (units.DRIVE_MY, units.DRIVE_SHARED_WITH_ME)
+ *
+ * One logical event can still dispatch up to TWO notification:save calls
+ * — one per tab — because owners (folder.created_by === receiver) see
+ * the badge in their My Drive tab, sharees see it in Shared with Me.
  *
  * For SHARE events (drive_*_shared) every receiver is a new sharee by
- * definition. Caller can simply pass parentFolderOwnerId=null so all
- * receivers land in Shared with Me — no split needed.
+ * definition. Caller passes parentFolderOwnerId=null so all receivers
+ * land in Shared with Me — no split needed.
  *
  * @param {Object} args
  * @param {Object} args.project
@@ -314,8 +268,8 @@ const splitReceiversByOwnership = (receiverIds = [], ownerId = null) => {
  * @param {string|null} args.folderId — parent folder_id (or null for root)
  * @param {string} args.itemId — file_id or folder_id being acted on
  * @param {string} args.unit — resource kind: drive_file_label or
- *   drive_folder_label. Internally relocated to `level_1` of the emitted
- *   payload (see helper docstring above).
+ *   drive_folder_label. Emitted as-is on the wire's `unit` field
+ *   (original contract preserved).
  * @param {string} args.action — e.g. 'drive_file_uploaded'
  * @param {string} args.message
  * @param {Object} args.referenceData
@@ -331,31 +285,31 @@ const notifyAllTabRouted = async ({
 
   const { owners, sharees } = splitReceiversByOwnership(receiverIds, parentFolderOwnerId);
 
-  // Callers pass the resource kind (drive_file_label / drive_folder_label)
-  // as `unit`. Per FE-team feedback (Vidya, 2026-05-13) the tab
-  // discriminator must live on `unit`, so we relocate the kind to
-  // `level_1` and stamp the tab sub-unit into `unit` per receiver group.
-  const kindLabel = unit;
-
   const fire = async (receivers, tabSubUnit) => {
     if (receivers.length === 0) return null;
-    const levels = await buildTabRoutedLevels({
-      project, folderId, itemId, kindLabel,
-    });
+    // Original level-hierarchy contract — level_1 carries the root
+    // ancestor folder_id for subtree rollup; tab discriminator lives
+    // in reference_data.view instead of mutating this output.
+    const levels = await buildNotificationLevels({ project, folderId, itemId });
     const payload = {
       project,
       sender: actor._id,
       receiver: receivers,
       section: sections.TOOLS,
       tool: DRIVE_TOOL,
-      unit: tabSubUnit,
+      unit,
       action,
       reference_id: levels.reference_id,
       level_1: levels.level_1,
       level_2: levels.level_2,
       level_3: levels.level_3,
       levels: levels.levels,
-      reference_data: referenceData,
+      reference_data: {
+        ...(referenceData || {}),
+        // ZL-18798 v3: tab discriminator added as a new key per FE-team
+        // feedback. Existing payload structure is unchanged.
+        view: tabSubUnit,
+      },
     };
     // Silent-mark notifications use { save: false, silent: true } and omit
     // the visible message; real notify calls use { notify: true, save: true }
@@ -372,7 +326,6 @@ const notifyAllTabRouted = async ({
 
 export default {
   buildNotificationLevels,
-  buildTabRoutedLevels,
   splitReceiversByOwnership,
   notifyAllTabRouted,
   getFolderReceivers,
