@@ -1094,13 +1094,20 @@ const deleteFolder = async ({ user, project, device, params }) => {
     updated_on: deleteTimestamp,
   };
 
-  const filesToDelete = await DriveFileRepository.countFiles({
+  // ZL-19058: capture file _ids before soft-delete so we can mark prior
+  // unread notifications referencing those files (and the folders) as
+  // read after the delete completes. Replaces the previous countFiles()
+  // call — getFiles returns full docs so we have both the count
+  // (filesToDeleteDocs.length) and the _ids needed for the notification
+  // cleanup pass below.
+  const filesToDeleteDocs = await DriveFileRepository.getFiles({
     filters: {
       project_id: project._id,
       folder_id: { $in: folderIds },
       deleted_on: 0,
     },
   });
+  const filesToDelete = filesToDeleteDocs.length;
 
   await Promise.all([
     DriveFileRepository.updateFiles({
@@ -1125,6 +1132,68 @@ const deleteFolder = async ({ user, project, device, params }) => {
       data: deleteData,
     }),
   ]);
+
+  // ZL-19058: silent-mark unread bell rows that reference any deleted
+  // folder OR any file inside (recursive — folderIds already contains
+  // root + all descendants from collectDescendantFolderIds). Same
+  // pattern as deleteFile + driveFileAccess.js share-revoke flow.
+  // Wrapped in try/catch — the delete itself already succeeded.
+  try {
+    const allDeletedItemIds = [
+      ...folderIds.map((id) => toIdString(id)),
+      ...filesToDeleteDocs.map((f) => toIdString(f._id)),
+    ];
+
+    const staleFilters = {
+      project_id: project._id,
+      reference_id: { $in: allDeletedItemIds },
+      message_read: false,
+    };
+
+    const staleNotifications = await NotificationRepository.getNotifications({
+      filters: staleFilters,
+    });
+
+    if (staleNotifications.length > 0) {
+      await NotificationRepository.updateNotification({
+        filters: staleFilters,
+        data: { message_read: true, updated: Date.now() },
+      });
+
+      // Group prior uuids per receiver — each FE drops its own badges
+      // from BadgeDB by primary key (notification_uuid).
+      const byReceiver = new Map();
+      staleNotifications.forEach((n) => {
+        const rid = toIdString(n.receiver);
+        if (!byReceiver.has(rid)) byReceiver.set(rid, []);
+        byReceiver.get(rid).push(n.notification_uuid);
+      });
+
+      await Promise.all(
+        Array.from(byReceiver.entries()).map(([receiverId, uuids]) =>
+          DriveNotificationReceivers.notifyAllTabRouted({
+            project,
+            actor: user,
+            receiverIds: [receiverId],
+            parentFolderOwnerId: null, // silent drop — tab doesn't matter, FE keys by uuid
+            folderId: folder.parent_folder_id,
+            itemId: folder._id,
+            unit: DRIVE_UNIT_FOLDER,
+            action: 'drive_folder_deleted',
+            referenceData: {
+              folder_id: toIdString(folder._id),
+              folder_name: folder.folder_name,
+              read_notification_ids: uuids.filter(Boolean),
+            },
+            socketClient,
+            options: { save: false, silent: true },
+          })
+        )
+      );
+    }
+  } catch (err) {
+    console.error('[deleteFolder] silent-mark stale notifications failed:', err.message);
+  }
 
   const [folderDeleteReceiverIds, parentFolderForDelete] = await Promise.all([
     DriveNotificationReceivers.getFolderReceivers({

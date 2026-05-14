@@ -804,6 +804,68 @@ const deleteFile = async ({ user, project, device, params }) => {
 
   await DriveFileRepository.deleteFile({ filters, data: deleteData });
 
+  // ZL-19058: when a file is deleted, every unread bell row that
+  // references it (drive_file_uploaded, drive_file_shared,
+  // drive_file_updated, drive_file_moved, comment/tag actions, etc.)
+  // points to a resource that no longer exists. Silently mark them
+  // as read in DB + emit notification:silent so the FE BadgeDB cache
+  // drops them via removeBadgesFromDB(read_notification_ids[]). Same
+  // pattern as the share-revoke flow in driveFileAccess.js:680-727
+  // (ZL-18489) and the unit-chat deleteChat flow in
+  // zillit_libs/unit-chat-service.js:716. Wrapped in try/catch — the
+  // delete itself already succeeded; never let badge cleanup fail the API.
+  try {
+    const staleFilters = {
+      project_id: project._id,
+      reference_id: toIdString(file._id),
+      message_read: false,
+    };
+
+    const staleNotifications = await NotificationRepository.getNotifications({
+      filters: staleFilters,
+    });
+
+    if (staleNotifications.length > 0) {
+      await NotificationRepository.updateNotification({
+        filters: staleFilters,
+        data: { message_read: true, updated: Date.now() },
+      });
+
+      // Group prior uuids per receiver — each FE drops its own badges
+      // from BadgeDB by primary key (notification_uuid).
+      const byReceiver = new Map();
+      staleNotifications.forEach((n) => {
+        const rid = toIdString(n.receiver);
+        if (!byReceiver.has(rid)) byReceiver.set(rid, []);
+        byReceiver.get(rid).push(n.notification_uuid);
+      });
+
+      await Promise.all(
+        Array.from(byReceiver.entries()).map(([receiverId, uuids]) =>
+          DriveNotificationReceivers.notifyAllTabRouted({
+            project,
+            actor: user,
+            receiverIds: [receiverId],
+            parentFolderOwnerId: null, // silent drop — tab doesn't matter, FE keys by uuid
+            folderId: file.folder_id,
+            itemId: file._id,
+            unit: DRIVE_UNIT_FILE,
+            action: 'drive_file_deleted',
+            referenceData: {
+              file_id: toIdString(file._id),
+              file_name: file.file_name,
+              read_notification_ids: uuids.filter(Boolean),
+            },
+            socketClient,
+            options: { save: false, silent: true },
+          })
+        )
+      );
+    }
+  } catch (err) {
+    console.error('[deleteFile] silent-mark stale notifications failed:', err.message);
+  }
+
   socketClient('__admin_events__', {
     event: 'drive:file:deleted',
     room: `${project._id.toString()}_room`,
