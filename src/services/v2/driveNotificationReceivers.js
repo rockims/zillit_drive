@@ -1,7 +1,11 @@
 import mongoose from 'mongoose';
 import DriveFolder from 'zillit-libs/mongo-models-v2/DriveFolder';
+import NotificationService from 'zillit-libs/services-v2/notification';
 import DriveFolderAccessRepository from '../../repositories/v2/driveFolderAccess.js';
 import DriveFileAccessRepository from '../../repositories/v2/driveFileAccess.js';
+
+const { sections, units } = NotificationService.NotificationConstants;
+const DRIVE_TOOL = 'drive_label';
 
 const toIdString = (value) => (value ? value.toString() : null);
 
@@ -197,8 +201,133 @@ const getMoveReceivers = async ({ project, actorId, sourceFolderId, targetFolder
   return [...new Set([...sourceUsers, ...targetUsers])];
 };
 
+/**
+ * ZL-18798: split a list of receiver user_ids into [owners, sharees]
+ * based on who owns the relevant item.
+ *
+ * Owners go to the "My Drive" tab; sharees go to "Shared with Me".
+ *
+ * @param {Array<string>} receiverIds — full receiver list (already excludes actor)
+ * @param {string|null} ownerId — the owning user_id (folder.created_by for nested
+ *   items, the folder.created_by for folder events themselves, or null for root
+ *   files where every receiver is a sharee).
+ * @returns {{ owners: string[], sharees: string[] }}
+ */
+const splitReceiversByOwnership = (receiverIds = [], ownerId = null) => {
+  if (!ownerId) {
+    return { owners: [], sharees: [...receiverIds] };
+  }
+  const ownerStr = toIdString(ownerId);
+  const owners = [];
+  const sharees = [];
+  receiverIds.forEach((rid) => {
+    if (toIdString(rid) === ownerStr) owners.push(rid);
+    else sharees.push(rid);
+  });
+  return { owners, sharees };
+};
+
+/**
+ * ZL-18798 (v3 — 2026-05-13 final per Vivek + Vidya): dispatch a drive
+ * notification to receivers, splitting them into "My Drive" and "Shared
+ * with Me" tabs by ownership.
+ *
+ * Earlier iterations of this helper changed the on-wire `unit` /
+ * `level_1` contract to carry the tab discriminator. FE leads (Vivek
+ * iOS + Vidya Android) pushed back: "Please don't change the existing
+ * workflow. If you need to add anything new, manage it with a new key
+ * so there is no impact on current functionality." This version
+ * complies — the existing payload is left UNCHANGED and a new
+ * `reference_data.view` key is added to discriminate the tab.
+ *
+ * On-wire payload (unchanged from pre-#69):
+ *   unit    = 'drive_file_label' | 'drive_folder_label'   (resource kind)
+ *   level_1 = root ancestor folder_id  (subtree rollup, unchanged)
+ *   level_2 = next-level folder_id
+ *   levels  = ['level_3:id', 'level_4:id', ...]
+ *
+ * New addition:
+ *   reference_data.view = 'my_drive_unit' | 'shared_with_me_unit'
+ *     ← tab discriminator; values match libs constants
+ *       (units.DRIVE_MY, units.DRIVE_SHARED_WITH_ME)
+ *
+ * One logical event can still dispatch up to TWO notification:save calls
+ * — one per tab — because owners (folder.created_by === receiver) see
+ * the badge in their My Drive tab, sharees see it in Shared with Me.
+ *
+ * For SHARE events (drive_*_shared) every receiver is a new sharee by
+ * definition. Caller passes parentFolderOwnerId=null so all receivers
+ * land in Shared with Me — no split needed.
+ *
+ * @param {Object} args
+ * @param {Object} args.project
+ * @param {Object} args.actor — user performing the action ({_id})
+ * @param {Array<string|ObjectId>} args.receiverIds — already excludes actor
+ * @param {string|null} args.parentFolderOwnerId — folder.created_by; null
+ *   for root-level files or share events (all receivers → sharees).
+ * @param {string|null} args.folderId — parent folder_id (or null for root)
+ * @param {string} args.itemId — file_id or folder_id being acted on
+ * @param {string} args.unit — resource kind: drive_file_label or
+ *   drive_folder_label. Emitted as-is on the wire's `unit` field
+ *   (original contract preserved).
+ * @param {string} args.action — e.g. 'drive_file_uploaded'
+ * @param {string} args.message
+ * @param {Object} args.referenceData
+ * @param {Function} args.socketClient
+ * @returns {Promise<void>}
+ */
+const notifyAllTabRouted = async ({
+  project, actor, receiverIds, parentFolderOwnerId,
+  folderId, itemId, unit, action, message, referenceData,
+  socketClient, options = { notify: true, save: true },
+}) => {
+  if (!Array.isArray(receiverIds) || receiverIds.length === 0) return;
+
+  const { owners, sharees } = splitReceiversByOwnership(receiverIds, parentFolderOwnerId);
+
+  const fire = async (receivers, tabSubUnit) => {
+    if (receivers.length === 0) return null;
+    // Original level-hierarchy contract — level_1 carries the root
+    // ancestor folder_id for subtree rollup; tab discriminator lives
+    // in reference_data.view instead of mutating this output.
+    const levels = await buildNotificationLevels({ project, folderId, itemId });
+    const payload = {
+      project,
+      sender: actor._id,
+      receiver: receivers,
+      section: sections.TOOLS,
+      tool: DRIVE_TOOL,
+      unit,
+      action,
+      reference_id: levels.reference_id,
+      level_1: levels.level_1,
+      level_2: levels.level_2,
+      level_3: levels.level_3,
+      levels: levels.levels,
+      reference_data: {
+        ...(referenceData || {}),
+        // ZL-18798 v3: tab discriminator added as a new key per FE-team
+        // feedback. Existing payload structure is unchanged.
+        view: tabSubUnit,
+      },
+    };
+    // Silent-mark notifications use { save: false, silent: true } and omit
+    // the visible message; real notify calls use { notify: true, save: true }
+    // with a message. Only add the message when it's a real notify.
+    if (message) payload.message = message;
+    return NotificationService.notifyAll(payload, options, socketClient);
+  };
+
+  await Promise.all([
+    fire(owners, units.DRIVE_MY),
+    fire(sharees, units.DRIVE_SHARED_WITH_ME),
+  ]);
+};
+
 export default {
   buildNotificationLevels,
+  splitReceiversByOwnership,
+  notifyAllTabRouted,
   getFolderReceivers,
   getFileReceivers,
   getMoveReceivers,

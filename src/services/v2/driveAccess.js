@@ -560,18 +560,11 @@ const setFolderAccessList = async ({
     .filter((id) => id !== toIdString(user._id));
 
   if (newReceiverIds.length > 0) {
-    // Build dynamic ancestor-chain levels so shared folders at depth > 1 surface under
-    // their root ancestor (level_1) → ... → the shared folder itself at the deepest level.
-    // Fixes the ZL-* report where level_2/level_3 were always null for child folders.
-    // Wrapped in the existing try/catch so any levels-resolution or FCM failure is logged
-    // and swallowed — the share DB write already succeeded above, API must still return 200.
+    // ZL-18798: share recipients are BY DEFINITION sharees (they just got
+    // shared into this folder for the first time). Always route to the
+    // Shared with Me tab — parentFolderOwnerId=null forces every receiver
+    // into the sharees bucket.
     try {
-      const shareLevels = await DriveNotificationReceivers.buildNotificationLevels({
-        project,
-        folderId: folder._id,
-        itemId: folder._id,
-      });
-
       // ZL-18486: silently mark prior unread `drive_folder_shared` for this folder +
       // these receivers as read, then emit `notification:silent` carrying those
       // prior notification_uuids in reference_data.read_notification_ids so the
@@ -596,54 +589,41 @@ const setFolderAccessList = async ({
           data: { message_read: true },
         });
 
-        await NotificationService.notifyAll(
-          {
-            project,
-            sender: user._id,
-            receiver: newReceiverIds,
-            section: sections.TOOLS,
-            tool: DRIVE_TOOL,
-            unit: DRIVE_UNIT_FOLDER,
-            action: 'drive_folder_shared',
-            reference_id: shareLevels.reference_id,
-            level_1: shareLevels.level_1,
-            level_2: shareLevels.level_2,
-            level_3: shareLevels.level_3,
-            levels: shareLevels.levels,
-            reference_data: {
-              folder_id: toIdString(folder._id),
-              folder_name: folder.folder_name,
-              read_notification_ids: priorReadIds.filter(Boolean),
-            },
-          },
-          { save: false, silent: true },
-          socketClient,
-        );
-      }
-
-      await NotificationService.notifyAll(
-        {
+        await DriveNotificationReceivers.notifyAllTabRouted({
           project,
-          sender: user._id,
-          receiver: newReceiverIds,
-          section: sections.TOOLS,
-          tool: DRIVE_TOOL,
+          actor: user,
+          receiverIds: newReceiverIds,
+          parentFolderOwnerId: null, // all receivers → Shared with Me
+          folderId: folder._id,
+          itemId: folder._id,
           unit: DRIVE_UNIT_FOLDER,
           action: 'drive_folder_shared',
-          reference_id: shareLevels.reference_id,
-          level_1: shareLevels.level_1,
-          level_2: shareLevels.level_2,
-          level_3: shareLevels.level_3,
-          levels: shareLevels.levels,
-          reference_data: {
+          referenceData: {
             folder_id: toIdString(folder._id),
             folder_name: folder.folder_name,
+            read_notification_ids: priorReadIds.filter(Boolean),
           },
-          message: `Folder "${folder.folder_name}" shared with you`,
+          socketClient,
+          options: { save: false, silent: true },
+        });
+      }
+
+      await DriveNotificationReceivers.notifyAllTabRouted({
+        project,
+        actor: user,
+        receiverIds: newReceiverIds,
+        parentFolderOwnerId: null, // all receivers → Shared with Me
+        folderId: folder._id,
+        itemId: folder._id,
+        unit: DRIVE_UNIT_FOLDER,
+        action: 'drive_folder_shared',
+        message: `Folder "${folder.folder_name}" shared with you`,
+        referenceData: {
+          folder_id: toIdString(folder._id),
+          folder_name: folder.folder_name,
         },
-        { notify: true, save: true },
         socketClient,
-      );
+      });
     } catch (notifErr) {
       console.error('[driveAccess] Folder share notification error:', notifErr.message);
     }
@@ -684,25 +664,25 @@ const setFolderAccessList = async ({
           data: { message_read: true },
         });
 
-        await NotificationService.notifyAll(
-          {
-            project,
-            sender: user._id,
-            receiver: revokedUserIds,
-            section: sections.TOOLS,
-            tool: DRIVE_TOOL,
-            unit: DRIVE_UNIT_FOLDER,
-            action: 'drive_folder_shared',
-            reference_id: toIdString(folder._id),
-            reference_data: {
-              folder_id: toIdString(folder._id),
-              folder_name: folder.folder_name,
-              read_notification_ids: revokedReadIds.filter(Boolean),
-            },
+        // ZL-18798: revoked users had Shared with Me badges; silent-mark
+        // must match that tab so the FE drops them from the right bucket.
+        await DriveNotificationReceivers.notifyAllTabRouted({
+          project,
+          actor: user,
+          receiverIds: revokedUserIds,
+          parentFolderOwnerId: null, // sharees only (the folder is now NOT shared with them)
+          folderId: folder._id,
+          itemId: folder._id,
+          unit: DRIVE_UNIT_FOLDER,
+          action: 'drive_folder_shared',
+          referenceData: {
+            folder_id: toIdString(folder._id),
+            folder_name: folder.folder_name,
+            read_notification_ids: revokedReadIds.filter(Boolean),
           },
-          { save: false, silent: true },
           socketClient,
-        );
+          options: { save: false, silent: true },
+        });
       }
     } catch (err) {
       console.error('[folder_access_revoke_silent_failed]:', err.message);
