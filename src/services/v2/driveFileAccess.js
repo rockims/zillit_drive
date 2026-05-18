@@ -577,15 +577,9 @@ const setFileAccessList = async ({ user, project, fileId, entries }) => {
     .map((e) => e.user_id);
 
   if (newReceiverIds.length > 0) {
-    // Build ancestor-chain levels from the file's parent folder (level_1 = root, etc.)
-    // Matches the file CRUD paths (update/delete/move) for consistent client-side routing.
-    // Wrapped in try/catch — share DB write already persisted; never let FCM issues 500 the API.
+    // ZL-18798: share recipients are by definition sharees (they just got
+    // shared in). All → Shared with Me tab (parentFolderOwnerId=null).
     try {
-      const shareLevels = await DriveNotificationReceivers.buildNotificationLevels({
-        project,
-        folderId: file.folder_id,
-        itemId: file._id,
-      });
       const folderId = file.folder_id ? toIdString(file.folder_id) : null;
 
       // ZL-18486: silently mark prior unread `drive_file_shared` for this file +
@@ -612,56 +606,43 @@ const setFileAccessList = async ({ user, project, fileId, entries }) => {
           data: { message_read: true },
         });
 
-        await NotificationService.notifyAll(
-          {
-            project,
-            sender: user._id,
-            receiver: newReceiverIds,
-            section: sections.TOOLS,
-            tool: DRIVE_TOOL,
-            unit: DRIVE_UNIT_FILE,
-            action: 'drive_file_shared',
-            reference_id: shareLevels.reference_id,
-            level_1: shareLevels.level_1,
-            level_2: shareLevels.level_2,
-            level_3: shareLevels.level_3,
-            levels: shareLevels.levels,
-            reference_data: {
-              file_id: toIdString(file._id),
-              file_name: file.file_name,
-              folder_id: folderId,
-              read_notification_ids: priorReadIds.filter(Boolean),
-            },
-          },
-          { save: false, silent: true },
-          socketClient,
-        );
-      }
-
-      await NotificationService.notifyAll(
-        {
+        await DriveNotificationReceivers.notifyAllTabRouted({
           project,
-          sender: user._id,
-          receiver: newReceiverIds,
-          section: sections.TOOLS,
-          tool: DRIVE_TOOL,
+          actor: user,
+          receiverIds: newReceiverIds,
+          parentFolderOwnerId: null, // all receivers → Shared with Me
+          folderId: file.folder_id,
+          itemId: file._id,
           unit: DRIVE_UNIT_FILE,
           action: 'drive_file_shared',
-          reference_id: shareLevels.reference_id,
-          level_1: shareLevels.level_1,
-          level_2: shareLevels.level_2,
-          level_3: shareLevels.level_3,
-          levels: shareLevels.levels,
-          reference_data: {
+          referenceData: {
             file_id: toIdString(file._id),
             file_name: file.file_name,
             folder_id: folderId,
+            read_notification_ids: priorReadIds.filter(Boolean),
           },
-          message: `File "${file.file_name}" shared with you`,
+          socketClient,
+          options: { save: false, silent: true },
+        });
+      }
+
+      await DriveNotificationReceivers.notifyAllTabRouted({
+        project,
+        actor: user,
+        receiverIds: newReceiverIds,
+        parentFolderOwnerId: null, // all receivers → Shared with Me
+        folderId: file.folder_id,
+        itemId: file._id,
+        unit: DRIVE_UNIT_FILE,
+        action: 'drive_file_shared',
+        message: `File "${file.file_name}" shared with you`,
+        referenceData: {
+          file_id: toIdString(file._id),
+          file_name: file.file_name,
+          folder_id: folderId,
         },
-        { notify: true, save: true },
         socketClient,
-      );
+      });
     } catch (err) {
       console.error('[file_access_notification_failed]:', err.message);
     }
@@ -702,25 +683,25 @@ const setFileAccessList = async ({ user, project, fileId, entries }) => {
           data: { message_read: true },
         });
 
-        await NotificationService.notifyAll(
-          {
-            project,
-            sender: user._id,
-            receiver: revokedUserIds,
-            section: sections.TOOLS,
-            tool: DRIVE_TOOL,
-            unit: DRIVE_UNIT_FILE,
-            action: 'drive_file_shared',
-            reference_id: toIdString(file._id),
-            reference_data: {
-              file_id: toIdString(file._id),
-              file_name: file.file_name,
-              read_notification_ids: revokedReadIds.filter(Boolean),
-            },
+        // ZL-18798: revoked users had Shared with Me badges; silent-mark must
+        // route to that same tab so the FE drops them from the right bucket.
+        await DriveNotificationReceivers.notifyAllTabRouted({
+          project,
+          actor: user,
+          receiverIds: revokedUserIds,
+          parentFolderOwnerId: null, // revoked sharees only
+          folderId: file.folder_id,
+          itemId: file._id,
+          unit: DRIVE_UNIT_FILE,
+          action: 'drive_file_shared',
+          referenceData: {
+            file_id: toIdString(file._id),
+            file_name: file.file_name,
+            read_notification_ids: revokedReadIds.filter(Boolean),
           },
-          { save: false, silent: true },
           socketClient,
-        );
+          options: { save: false, silent: true },
+        });
       }
     } catch (err) {
       console.error('[file_access_revoke_silent_failed]:', err.message);
