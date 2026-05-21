@@ -8,6 +8,7 @@ import DriveFile from 'zillit-libs/mongo-models-v2/DriveFile';
 import DriveFolderRepository from '../../repositories/v2/driveFolder.js';
 import DriveFileRepository from '../../repositories/v2/driveFile.js';
 import DriveFileAccessRepository from '../../repositories/v2/driveFileAccess.js';
+import DriveFolderAccessRepository from '../../repositories/v2/driveFolderAccess.js';
 import DriveAccessService from './driveAccess.js';
 import DriveActivityService from './driveActivity.js';
 import DriveNotificationReceivers from './driveNotificationReceivers.js';
@@ -69,7 +70,7 @@ const parseListingQuery = (query = {}) => {
     ? groupByInput
     : 'none';
   const view = ['all', 'files', 'folders'].includes(viewInput) ? viewInput : 'all';
-  const quickFilter = ['none', 'mine', 'shared', 'last_7_days', 'large_files', 'recent'].includes(quickFilterInput)
+  const quickFilter = ['none', 'mine', 'shared', 'shared_by_me', 'last_7_days', 'large_files', 'recent'].includes(quickFilterInput)
     ? quickFilterInput
     : 'none';
 
@@ -460,6 +461,19 @@ const getFolders = async ({ user, project, query }) => {
     andFilters.push({ created_by: user._id });
   } else if (listingQuery.quickFilter === 'shared') {
     andFilters.push({ created_by: { $ne: user._id } });
+  } else if (listingQuery.quickFilter === 'shared_by_me') {
+    // ZL-19247: folders I own that I have shared with at least one other user.
+    // Resolve via DriveFolderAccess: rows where created_by=me and user_id≠me
+    // yield the set of folder_ids I've actually shared. Narrow to created_by=me
+    // so we don't surface folders I merely re-granted on behalf of someone else.
+    const sharedFolderIds = await DriveFolderAccessRepository.distinctFolderIds({
+      filters: {
+        project_id: project._id,
+        user_id: { $ne: user._id },
+        created_by: user._id,
+      },
+    });
+    andFilters.push({ created_by: user._id, _id: { $in: sharedFolderIds } });
   } else if (listingQuery.quickFilter === 'last_7_days') {
     andFilters.push({ created_on: { $gte: Date.now() - 7 * 24 * 60 * 60 * 1000 } });
   } else if (listingQuery.quickFilter === 'recent') {
@@ -683,6 +697,29 @@ const getDriveContents = async ({ user, project, query }) => {
   } else if (listingQuery.quickFilter === 'shared') {
     folderFilters.created_by = { $ne: user._id };
     fileFilters.created_by = { $ne: user._id };
+  } else if (listingQuery.quickFilter === 'shared_by_me') {
+    // ZL-19247: items I own (folders + files) that I have shared with at least
+    // one other user. Two parallel lookups against the access collections.
+    const [sharedFolderIds, sharedFileIds] = await Promise.all([
+      DriveFolderAccessRepository.distinctFolderIds({
+        filters: {
+          project_id: project._id,
+          user_id: { $ne: user._id },
+          created_by: user._id,
+        },
+      }),
+      DriveFileAccessRepository.distinctFileIds({
+        filters: {
+          project_id: project._id,
+          user_id: { $ne: user._id },
+          granted_by: user._id,
+        },
+      }),
+    ]);
+    folderFilters.created_by = user._id;
+    folderFilters._id = { $in: sharedFolderIds };
+    fileFilters.created_by = user._id;
+    fileFilters._id = { $in: sharedFileIds };
   } else if (listingQuery.quickFilter === 'last_7_days') {
     const lastWeek = Date.now() - 7 * 24 * 60 * 60 * 1000;
     folderFilters.created_on = { $gte: lastWeek };
