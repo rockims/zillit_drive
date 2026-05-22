@@ -1,8 +1,7 @@
-import Joi from 'joi';
-import 'joi-objectid';
-
-// joi-objectid attaches Joi.objectId() via side-effect import already done
-// elsewhere in this codebase; the import above ensures we get the same.
+// Use joi-oid like the rest of zillit_drive — it re-exports Joi with
+// .objectId() attached. The earlier `joi-objectid` side-effect import was
+// wrong: that package isn't in zillit_drive's deps and crashes at require().
+import Joi from 'joi-oid';
 
 const createShareLink = Joi.object({
   // Optional. When provided, backend records the recipients on the link

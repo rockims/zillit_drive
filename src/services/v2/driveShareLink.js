@@ -5,7 +5,9 @@ import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import BadRequest from 'zillit-libs/errors/BadRequest';
 import Forbidden from 'zillit-libs/errors/Forbidden';
 import NotFound from 'zillit-libs/errors/NotFound';
-import SesService from 'zillit-libs/services-v2/aws/ses';
+// zillit-libs exports map declares SES under './services-v2/ses', not
+// './services-v2/aws/ses' — the 'aws/' folder is hidden behind the alias.
+import SesService from 'zillit-libs/services-v2/ses';
 
 import DriveFileRepository from '../../repositories/v2/driveFile.js';
 import DriveShareLinkRepository from '../../repositories/v2/driveShareLink.js';
