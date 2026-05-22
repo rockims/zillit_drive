@@ -79,6 +79,29 @@ const DriveShareLinkController = {
     }
   },
 
+  async streamContent(req, res) {
+    try {
+      // Service streams directly to `res` (pipes S3 body) and returns null.
+      // Don't call handleResponse — headers are already written.
+      await DriveShareLinkService.streamContent({
+        params: req.params,
+        query: req.query,
+        req,
+        res,
+      });
+    } catch (error) {
+      console.log('[share_stream_content_failed]:', error.message);
+      // Only attempt to send an error response if we haven't already
+      // started streaming.
+      if (!res.headersSent) {
+        return ApiResponse.handleError(res, error);
+      }
+      // Otherwise the connection is already in stream mode — let it
+      // close. The browser will surface a network error to the player.
+      return res.destroy(error);
+    }
+  },
+
   async getOfficeViewerConfig(req, res) {
     try {
       const data = await DriveShareLinkService.getOfficeViewerConfig({

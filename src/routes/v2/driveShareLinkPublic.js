@@ -23,7 +23,18 @@ router.get('/share/:token', DriveShareLinkController.getViewerData);
 
 // Short-lived presigned S3 GET URL for the underlying media. Records the
 // view (counts against max_views, logs recipient + IP + UA).
+// DEPRECATED for the public viewer — clients should use /stream-content
+// (server-side proxy) instead so the raw S3 URL is never exposed.
+// Kept for backwards compatibility with any older client.
 router.get('/share/:token/stream', DriveShareLinkController.getStreamUrl);
+
+// Server-side proxied stream. The browser's <video src> / <img src> /
+// <iframe src> points here directly; drive forwards Range requests to S3
+// and pipes the body through. The underlying presigned URL is never
+// exposed to the client, so devtools "copy as URL" gives an attacker a
+// share-link-gated URL (revocable, view-limited) rather than raw S3
+// access.
+router.get('/share/:token/stream-content', DriveShareLinkController.streamContent);
 
 // Collabora viewer config for Office files (docx, xlsx, pptx, etc.).
 // Returns { collabora_url, wopi_src, access_token, ... } so the FE can

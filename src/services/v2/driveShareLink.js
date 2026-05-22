@@ -537,6 +537,108 @@ const getStreamUrl = async ({ params, query, req }) => {
 };
 
 /**
+ * Server-side proxy stream for the underlying file.
+ *
+ * Unlike `getStreamUrl` (which returns a 5-min presigned S3 URL the
+ * client can copy from devtools to grab raw file access), this endpoint
+ * streams the S3 object body THROUGH drive. The browser's `<video src>`
+ * / `<img src>` / `<iframe src>` points at this drive endpoint instead
+ * of S3, so:
+ *
+ *   - No presigned URL is ever exposed to the client
+ *   - Every byte served goes through the share-link auth gate
+ *     (revoked / expired / max_views — same as the rest of the public
+ *     endpoints)
+ *   - Range requests (video seeking) are forwarded to S3 so playback
+ *     behaviour is identical to the presigned-URL path
+ *
+ * Anti-leak: an attacker who copies the proxy URL from devtools still
+ * gets a URL that depends on the share-link token. Revoking the link
+ * kills all future access; the URL has no value outside the link's
+ * lifetime.
+ */
+const streamContent = async ({ params, query, req, res }) => {
+  const { token } = params;
+  const { r: recipientToken } = query;
+
+  const { link, recipient } = await validatePublicToken({ token, recipientToken });
+
+  const file = await DriveFileRepository.getFile({
+    filters: { _id: link.item_id, project_id: link.project_id, deleted_on: 0 },
+  });
+  if (!file) throw new NotFound('file_not_found');
+
+  const s3Key = file.file_path
+    || file.attachments?.[0]?.media
+    || file.attachments?.[0]?.file_path;
+  if (!s3Key) throw new BadRequest('file_has_no_storage_path');
+
+  const attachment = file.attachments?.[0] || {};
+  const bucket = attachment.bucket || S3_BUCKET;
+  const region = attachment.region || S3_DEFAULT_REGION;
+  const s3 = getS3Client(region);
+
+  // Forward Range from client → S3 so video seeking works. Without this
+  // the entire object is streamed for every play position which makes
+  // mid-file seeks unusable on large files.
+  const rangeHeader = req?.headers?.range;
+  const cmdInput = { Bucket: bucket, Key: s3Key };
+  if (rangeHeader) cmdInput.Range = rangeHeader;
+
+  const s3Response = await s3.send(new GetObjectCommand(cmdInput));
+
+  // Forward content metadata so the browser treats the stream identically
+  // to a direct S3 fetch.
+  if (file.mime_type) res.setHeader('Content-Type', file.mime_type);
+  if (s3Response.ContentLength) res.setHeader('Content-Length', s3Response.ContentLength);
+  if (s3Response.ContentRange) res.setHeader('Content-Range', s3Response.ContentRange);
+  if (s3Response.AcceptRanges) res.setHeader('Accept-Ranges', s3Response.AcceptRanges);
+  if (s3Response.ETag) res.setHeader('ETag', s3Response.ETag);
+
+  // Inline disposition — same as the presigned URL config, prevents the
+  // browser from offering a Save dialog when the URL is opened directly.
+  const safeName = encodeURIComponent(file.file_name || 'file');
+  res.setHeader('Content-Disposition', `inline; filename="${safeName}"`);
+
+  // 206 Partial Content if we forwarded a Range; 200 otherwise.
+  res.status(rangeHeader && s3Response.ContentRange ? 206 : 200);
+
+  // Record the view ONLY on initial (non-Range, or Range starts at 0)
+  // requests — video players issue many Range fetches for seek/buffer
+  // and we don't want each one to bump view_count.
+  const isInitialRequest = !rangeHeader || /^bytes=0-/.test(rangeHeader);
+  if (isInitialRequest) {
+    // Fire-and-forget so the response stream isn't gated on the DB write.
+    DriveShareLinkRepository.recordView({
+      _id: link._id,
+      recipientToken,
+      ip: req?.ip || req?.headers?.['x-forwarded-for'] || null,
+      userAgent: req?.headers?.['user-agent'] || null,
+    }).catch((err) => {
+      // eslint-disable-next-line no-console
+      console.warn('[share_link_recordview_failed]:', err?.message || err);
+    });
+  }
+
+  // Pipe S3 body directly to the response stream. Will close the response
+  // when the underlying stream ends or errors.
+  s3Response.Body.on('error', (err) => {
+    // eslint-disable-next-line no-console
+    console.error('[share_link_stream_pipe_failed]:', err?.message || err);
+    if (!res.headersSent) {
+      res.status(500).end();
+    } else {
+      res.destroy(err);
+    }
+  });
+  s3Response.Body.pipe(res);
+
+  // signal to controller not to call handleResponse — we're handling res
+  // directly.
+  return null;
+};
+
+/**
  * Office viewer config for public share-link recipients.
  *
  * When the shared file is a Collabora-supported Office format (docx,
@@ -633,6 +735,7 @@ export default {
   revokeShareLink,
   getViewerData,
   getStreamUrl,
+  streamContent,
   getOfficeViewerConfig,
   recordView,
 };
