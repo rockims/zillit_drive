@@ -249,11 +249,27 @@ const sendShareEmailViaDistribution = async ({
 const sendShareEmail = async ({
   link, recipient, file, sender, moduledata,
 }) => {
+  // Positive visibility: which path are we about to try, and why?
+  // Without this, a silent success is indistinguishable from a no-op when
+  // debugging "the email never arrived". The cost is one log line per send.
+  // eslint-disable-next-line no-console
+  console.info('[share_link_email_attempt]:', {
+    to: recipient.email,
+    sender_id: String(sender?._id || ''),
+    sender_email: sender?.email,
+    has_mailbox: !!(sender?.mail_box_detail?.id),
+    has_moduledata: !!moduledata,
+  });
+
   // Path A — distribution via emailapi (preferred, no anti-spoof issue)
   if (sender?.mail_box_detail?.id && moduledata) {
     try {
       await sendShareEmailViaDistribution({
         link, recipient, file, sender, moduledata,
+      });
+      // eslint-disable-next-line no-console
+      console.info('[share_link_email_sent_via_distribution]:', {
+        to: recipient.email, from: sender.mail_box_detail.email_address,
       });
       return;
     } catch (err) {
@@ -275,7 +291,15 @@ const sendShareEmail = async ({
         link, recipient, file, sender,
       }),
     });
-    await ses.sendEmail();
+    const sesResult = await ses.sendEmail();
+    // eslint-disable-next-line no-console
+    console.info('[share_link_email_sent_via_ses]:', {
+      to: recipient.email,
+      message_id: sesResult?.messageId,
+      accepted: sesResult?.accepted,
+      rejected: sesResult?.rejected,
+      response: sesResult?.response,
+    });
   } catch (err) {
     // Final fallback failure — non-fatal, link still exists in DB.
     // eslint-disable-next-line no-console
