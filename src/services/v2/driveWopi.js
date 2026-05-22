@@ -53,6 +53,41 @@ const generateAccessToken = ({ user, project, file, canEdit, canDownload }) => {
 };
 
 /**
+ * Generate a WOPI access token for a PUBLIC share-link recipient — i.e.
+ * someone viewing the file through /share/:token without a Zillit account.
+ *
+ * Same shape as `generateAccessToken` but:
+ *   - `userId` carries the recipient_token (unique per share-link recipient)
+ *   - `userName` is the recipient's email
+ *   - `canEdit` is force-false (PutFile already rejects on !canEdit)
+ *   - `canDownload` is force-false (anti-leak)
+ *   - `linkId` is embedded so revoke / expiry checks can be reproduced
+ *
+ * The token type remains 'wopi_access' so the existing CheckFileInfo /
+ * GetFile endpoints accept it without changes — they only validate
+ * the signature, type, and fileId match.
+ */
+const generatePublicShareAccessToken = ({
+  link, recipient, project, file,
+}) => {
+  const payload = {
+    type: 'wopi_access',
+    // Mark the origin so audit/grep can tell apart user vs share-link sessions.
+    origin: 'public_share_link',
+    userId: recipient?.recipient_token || link._id.toString(),
+    projectId: project._id.toString(),
+    fileId: file._id.toString(),
+    userName: recipient?.email || 'Share Recipient',
+    canEdit: false,
+    canDownload: false,
+    linkId: link._id.toString(),
+  };
+  const token = signAccessToken(payload);
+  const ttl = getAccessTokenTTL();
+  return { token, ttl };
+};
+
+/**
  * Verify a WOPI access token and return the decoded payload.
  */
 const verifyWopiToken = (token) => {
@@ -272,6 +307,7 @@ const putFileContents = async ({ params, query, req }) => {
 
 export default {
   generateAccessToken,
+  generatePublicShareAccessToken,
   verifyWopiToken,
   checkFileInfo,
   getFileContents,

@@ -79,6 +79,20 @@ const DriveShareLinkController = {
     }
   },
 
+  async getOfficeViewerConfig(req, res) {
+    try {
+      const data = await DriveShareLinkService.getOfficeViewerConfig({
+        params: req.params,
+        query: req.query,
+        req,
+      });
+      return ApiResponse.handleResponse(res, { message: 'share_office_viewer_config', data });
+    } catch (error) {
+      console.log('[share_office_viewer_failed]:', error.message);
+      return ApiResponse.handleError(res, error);
+    }
+  },
+
   async recordView(req, res) {
     try {
       const data = await DriveShareLinkService.recordView({

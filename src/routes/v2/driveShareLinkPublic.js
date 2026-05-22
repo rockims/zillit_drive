@@ -25,6 +25,13 @@ router.get('/share/:token', DriveShareLinkController.getViewerData);
 // view (counts against max_views, logs recipient + IP + UA).
 router.get('/share/:token/stream', DriveShareLinkController.getStreamUrl);
 
+// Collabora viewer config for Office files (docx, xlsx, pptx, etc.).
+// Returns { collabora_url, wopi_src, access_token, ... } so the FE can
+// embed the Collabora iframe. Token has canEdit:false + canDownload:false
+// hard-coded, so the same WOPI host endpoints used by the in-app editor
+// safely serve public-share traffic.
+router.get('/share/:token/office-viewer', DriveShareLinkController.getOfficeViewerConfig);
+
 // Lightweight ping for the viewer to call on page load (separate from
 // /stream so analytics events don't consume presigned URL allocations).
 router.post('/share/:token/view', DriveShareLinkController.recordView);

@@ -11,6 +11,13 @@ import EncryptDecryptUtil from 'zillit-libs/utils/encrypt-decrypt';
 import DriveFileRepository from '../../repositories/v2/driveFile.js';
 import DriveShareLinkRepository from '../../repositories/v2/driveShareLink.js';
 import DriveFileAccessService from './driveFileAccess.js';
+import DriveWopiService from './driveWopi.js';
+import {
+  COLLABORA_URL,
+  WOPI_BASE_URL,
+  EDITABLE_EXTENSIONS,
+  getCollaboraEditorUrl,
+} from './driveEditor.js';
 import { getUrls } from './config.js';
 
 /**
@@ -529,6 +536,79 @@ const getStreamUrl = async ({ params, query, req }) => {
   };
 };
 
+/**
+ * Office viewer config for public share-link recipients.
+ *
+ * When the shared file is a Collabora-supported Office format (docx,
+ * xlsx, pptx, etc.) the public viewer in zillit_web embeds Collabora
+ * Online in an iframe to render it — same WOPI host (drive) that the
+ * in-app editor uses, just with a public-share access token.
+ *
+ * Returns the config the FE needs to build the iframe URL:
+ *   ${collaboraUrl}/browser/.../cool.html?WOPISrc=...&access_token=...
+ *
+ * Security:
+ *   - `canEdit: false` is hard-coded in the WOPI token → PutFile is
+ *     refused by drive's WOPI host (existing permission check at
+ *     driveWopi.js:175).
+ *   - `canDownload: false` → CheckFileInfo sets DisablePrint,
+ *     DisableExport, HideExportOption, HidePrintOption — Collabora
+ *     hides the download/print/export menus.
+ *   - The recipient's email becomes the `UserFriendlyName` Collabora
+ *     displays in its UI corner, providing soft attribution.
+ */
+const getOfficeViewerConfig = async ({ params, query, req }) => {
+  const { token } = params;
+  const { r: recipientToken } = query;
+
+  const { link, recipient } = await validatePublicToken({ token, recipientToken });
+
+  const file = await DriveFileRepository.getFile({
+    filters: { _id: link.item_id, project_id: link.project_id, deleted_on: 0 },
+  });
+  if (!file) throw new NotFound('file_not_found');
+
+  const ext = (file.file_extension || '').toLowerCase().replace(/^\./, '');
+  if (!EDITABLE_EXTENSIONS.includes(ext)) {
+    throw new BadRequest('file_type_not_collabora_viewable');
+  }
+
+  // Generate a public-share-flavoured WOPI access token. Hard-codes
+  // canEdit:false and canDownload:false so this branch can't be used
+  // to exfiltrate or modify, even with a leaked recipient link.
+  const { token: accessToken, ttl: accessTokenTTL } = DriveWopiService
+    .generatePublicShareAccessToken({
+      link,
+      recipient,
+      project: { _id: link.project_id },
+      file,
+    });
+
+  const wopiSrc = `${WOPI_BASE_URL}/wopi/files/${file._id}`;
+  const editorUrl = await getCollaboraEditorUrl();
+
+  // Record the view here — opening the Collabora viewer is the moment
+  // the recipient sees the content (same semantics as getStreamUrl for
+  // images/videos/PDFs).
+  await DriveShareLinkRepository.recordView({
+    _id: link._id,
+    recipientToken,
+    ip: req?.ip || req?.headers?.['x-forwarded-for'] || null,
+    userAgent: req?.headers?.['user-agent'] || null,
+  });
+
+  return {
+    collabora_url: COLLABORA_URL,
+    editor_url: editorUrl,
+    wopi_src: wopiSrc,
+    access_token: accessToken,
+    access_token_ttl: accessTokenTTL,
+    file_name: file.file_name,
+    file_type: ext,
+    watermark: resolveWatermark({ template: link.watermark_template, recipient }),
+  };
+};
+
 const recordView = async ({ params, query, req }) => {
   // Companion endpoint for the FE viewer to ping when the page loads
   // (separate from /stream so analytics/heartbeat events don't burn
@@ -553,5 +633,6 @@ export default {
   revokeShareLink,
   getViewerData,
   getStreamUrl,
+  getOfficeViewerConfig,
   recordView,
 };
