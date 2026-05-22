@@ -50,7 +50,30 @@ const getS3Client = (region) => {
 
 const STREAM_URL_EXPIRY_SECONDS = 300;      // 5 min — short window per request
 
-const PUBLIC_BASE_URL = process.env.PUBLIC_WEB_URL || 'https://dev.zillit.com';
+/**
+ * Resolve the public web origin for share-link URLs.
+ *
+ * Resolution order:
+ *   1. PUBLIC_WEB_URL env var if set (lets ops override for any deploy)
+ *   2. Derive from NODE_ENV:
+ *        dev   → https://dev.zillit.com
+ *        qa    → https://qa.zillit.com
+ *        prod  → https://web.zillit.com
+ *   3. Fallback: https://dev.zillit.com
+ *
+ * Computed at module load — restart the service if NODE_ENV changes.
+ */
+const resolvePublicWebUrl = () => {
+  if (process.env.PUBLIC_WEB_URL) return process.env.PUBLIC_WEB_URL;
+
+  const env = (process.env.NODE_ENV || '').toLowerCase();
+  if (env === 'prod' || env === 'production') return 'https://web.zillit.com';
+  if (env === 'qa') return 'https://qa.zillit.com';
+  // dev / staging / unset all route to dev.zillit.com
+  return 'https://dev.zillit.com';
+};
+
+const PUBLIC_BASE_URL = resolvePublicWebUrl();
 
 const toIdString = (value) => (value ? value.toString() : null);
 
