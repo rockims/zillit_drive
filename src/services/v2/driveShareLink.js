@@ -595,6 +595,19 @@ const streamContent = async ({ params, query, req, res }) => {
   if (s3Response.AcceptRanges) res.setHeader('Accept-Ranges', s3Response.AcceptRanges);
   if (s3Response.ETag) res.setHeader('ETag', s3Response.ETag);
 
+  // Cross-Origin-Resource-Policy: cross-origin
+  //
+  // Helmet's default sets CORP to 'same-origin' app-wide, which blocks
+  // <video src>, <img src>, <iframe src> from cross-origin pages (the
+  // public viewer at https://*.zillit.com fetching from this api host).
+  // CORS alone is NOT enough for media embed — the browser enforces
+  // CORP separately. We override to 'cross-origin' here so the public
+  // viewer can actually render the stream.
+  //
+  // Auth is unaffected: every byte still flows through
+  // validatePublicToken (revoked / expired / max_views gates).
+  res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+
   // Inline disposition — same as the presigned URL config, prevents the
   // browser from offering a Save dialog when the URL is opened directly.
   const safeName = encodeURIComponent(file.file_name || 'file');
