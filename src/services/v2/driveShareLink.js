@@ -1,4 +1,5 @@
 import crypto from 'crypto';
+import axios from 'axios';
 import { S3Client, GetObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 
@@ -8,10 +9,12 @@ import NotFound from 'zillit-libs/errors/NotFound';
 // zillit-libs exports map declares SES under './services-v2/ses', not
 // './services-v2/aws/ses' — the 'aws/' folder is hidden behind the alias.
 import SesService from 'zillit-libs/services-v2/ses';
+import EncryptDecryptUtil from 'zillit-libs/utils/encrypt-decrypt';
 
 import DriveFileRepository from '../../repositories/v2/driveFile.js';
 import DriveShareLinkRepository from '../../repositories/v2/driveShareLink.js';
 import DriveFileAccessService from './driveFileAccess.js';
+import { getUrls } from './config.js';
 
 /**
  * DriveShareLinkService
@@ -180,7 +183,90 @@ const escapeHtml = (s) => String(s).replace(/[&<>"']/g, (c) => ({
   '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
 }[c]));
 
-const sendShareEmail = async ({ link, recipient, file, sender }) => {
+/**
+ * Send the share-link email through the email service's /v2/imap-send
+ * endpoint — the same "distribution" pipeline used by zillit_script_distribution,
+ * zillit_schedule_distribution, and PM's deal-memo flow.
+ *
+ * Benefit over direct SES: the email is dispatched from the sender's own
+ * provisioned mailbox (user.mail_box_detail.email_address) instead of
+ * info@zillit.com, which avoids same-domain anti-spoof rejections and lands
+ * in the sender's "Distributed Mails" folder for audit.
+ *
+ * Caller must pass `moduledata` (the encrypted auth blob the route middleware
+ * attaches to req.headers) — the email service uses it to authenticate the
+ * inter-service call.
+ *
+ * Throws on failure so the caller can fall back to SES.
+ */
+const sendShareEmailViaDistribution = async ({
+  link, recipient, file, sender, moduledata,
+}) => {
+  if (!sender?.mail_box_detail?.email_address || !sender?.mail_box_detail?.id) {
+    // Sender has no mailbox — caller should fall back to SES.
+    throw new Error('sender_has_no_mailbox');
+  }
+  if (!moduledata) {
+    throw new Error('moduledata_required_for_imap_send');
+  }
+
+  const payload = {
+    from: `${sender.mail_box_detail.name || sender.full_name || ''} <${sender.mail_box_detail.email_address}>`.trim(),
+    to: [{ email_address: recipient.email }],
+    cc: [],
+    bcc: [],
+    subject: `${sender?.full_name || sender?.email || 'A Zillit user'} shared "${file.file_name}" with you`,
+    body: buildEmailHtml({
+      link, recipient, file, sender,
+    }),
+    storage_folder: 'Distributed Mails',
+  };
+
+  const bodyhash = new EncryptDecryptUtil().hashWithSHA256(
+    JSON.stringify({ payload, moduledata }),
+  );
+
+  await axios.request({
+    method: 'post',
+    maxBodyLength: Infinity,
+    url: `${getUrls('CNC_BASE_URL')}/v2/imap-send`,
+    headers: { moduledata, bodyhash },
+    data: payload,
+  });
+};
+
+/**
+ * Top-level send. Tries the distribution path first (sender mailbox →
+ * imap-send through emailapi). Falls back to direct SES if the sender has
+ * no provisioned mailbox — SES is what device-otp.js and project.js use
+ * for system-level invitation emails, so the fallback matches an existing
+ * accepted pattern in the codebase.
+ *
+ * All errors are caught and logged. The share link is already persisted
+ * before this fires, so even if both paths fail the sender can still copy
+ * the URL manually from the ShareDrawer.
+ */
+const sendShareEmail = async ({
+  link, recipient, file, sender, moduledata,
+}) => {
+  // Path A — distribution via emailapi (preferred, no anti-spoof issue)
+  if (sender?.mail_box_detail?.id && moduledata) {
+    try {
+      await sendShareEmailViaDistribution({
+        link, recipient, file, sender, moduledata,
+      });
+      return;
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.warn(
+        '[share_link_email_distribution_failed_fallback_ses]:',
+        err?.response?.data?.message || err?.message || err,
+      );
+      // fall through to SES
+    }
+  }
+
+  // Path B — direct SES fallback (system sender = info@zillit.com)
   try {
     const ses = new SesService({
       to: recipient.email,
@@ -191,9 +277,7 @@ const sendShareEmail = async ({ link, recipient, file, sender }) => {
     });
     await ses.sendEmail();
   } catch (err) {
-    // Email failures are logged but non-fatal — the share link still
-    // exists in the DB and can be re-sent (or the sender can copy the
-    // URL manually from the ShareDrawer).
+    // Final fallback failure — non-fatal, link still exists in DB.
     // eslint-disable-next-line no-console
     console.error('[share_link_email_failed]:', err?.message || err);
   }
@@ -201,7 +285,7 @@ const sendShareEmail = async ({ link, recipient, file, sender }) => {
 
 /* ───────────── Authenticated endpoints ───────────── */
 
-const createShareLink = async ({ user, project, params, body }) => {
+const createShareLink = async ({ user, project, params, body, moduledata }) => {
   const { fileId } = params;
 
   const file = await DriveFileRepository.getFile({
@@ -247,10 +331,11 @@ const createShareLink = async ({ user, project, params, body }) => {
   });
 
   // Fire off emails (non-blocking errors). Sender info is best-effort —
-  // populated from the user document we already have.
+  // populated from the user document we already have. moduledata is
+  // forwarded so the distribution path can re-authenticate against emailapi.
   if (recipients.length > 0) {
     await Promise.all(recipients.map((recipient) => sendShareEmail({
-      link, recipient, file, sender: user,
+      link, recipient, file, sender: user, moduledata,
     })));
   }
 

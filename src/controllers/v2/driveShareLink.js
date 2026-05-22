@@ -4,11 +4,16 @@ import DriveShareLinkService from '../../services/v2/driveShareLink.js';
 const DriveShareLinkController = {
   async createShareLink(req, res) {
     try {
+      // Forward moduledata so the service can re-authenticate against the
+      // email service when dispatching share emails via /v2/imap-send
+      // (same pattern as script_distribution + project_managment's deal-memo).
+      const { moduledata } = req.headers || {};
       const data = await DriveShareLinkService.createShareLink({
         user: req.user,
         project: req.project,
         params: req.params,
         body: req.body,
+        moduledata,
       });
       return ApiResponse.handleResponse(res, { message: 'share_link_created', data });
     } catch (error) {
