@@ -95,7 +95,7 @@ const parseListingQuery = (query = {}) => {
     ? groupByInput
     : 'none';
   const view = ['all', 'files', 'folders'].includes(viewInput) ? viewInput : 'all';
-  const quickFilter = ['none', 'mine', 'shared', 'last_7_days', 'large_files'].includes(quickFilterInput)
+  const quickFilter = ['none', 'mine', 'shared', 'shared_by_me', 'last_7_days', 'large_files'].includes(quickFilterInput)
     ? quickFilterInput
     : 'none';
 
@@ -510,6 +510,19 @@ const getFiles = async ({ user, project, query }) => {
     andFilters.push({ created_by: user._id });
   } else if (listingQuery.quickFilter === 'shared') {
     andFilters.push({ created_by: { $ne: user._id } });
+  } else if (listingQuery.quickFilter === 'shared_by_me') {
+    // ZL-19247: files I own that I have shared with at least one other user.
+    // Resolve via DriveFileAccess: rows where granted_by=me and user_id≠me yield
+    // the set of file_ids I've actually shared. Then narrow to created_by=me so
+    // we don't surface files I merely re-granted on behalf of someone else.
+    const sharedFileIds = await DriveFileAccessRepository.distinctFileIds({
+      filters: {
+        project_id: project._id,
+        user_id: { $ne: user._id },
+        granted_by: user._id,
+      },
+    });
+    andFilters.push({ created_by: user._id, _id: { $in: sharedFileIds } });
   } else if (listingQuery.quickFilter === 'last_7_days') {
     andFilters.push({ created_on: { $gte: Date.now() - 7 * 24 * 60 * 60 * 1000 } });
   } else if (listingQuery.quickFilter === 'large_files') {
