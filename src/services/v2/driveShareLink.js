@@ -6,9 +6,6 @@ import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import BadRequest from 'zillit-libs/errors/BadRequest';
 import Forbidden from 'zillit-libs/errors/Forbidden';
 import NotFound from 'zillit-libs/errors/NotFound';
-// zillit-libs exports map declares SES under './services-v2/ses', not
-// './services-v2/aws/ses' — the 'aws/' folder is hidden behind the alias.
-import SesService from 'zillit-libs/services-v2/ses';
 import EncryptDecryptUtil from 'zillit-libs/utils/encrypt-decrypt';
 
 import DriveFileRepository from '../../repositories/v2/driveFile.js';
@@ -237,14 +234,21 @@ const sendShareEmailViaDistribution = async ({
 
 /**
  * Top-level send. Tries the distribution path first (sender mailbox →
- * imap-send through emailapi). Falls back to direct SES if the sender has
- * no provisioned mailbox — SES is what device-otp.js and project.js use
- * for system-level invitation emails, so the fallback matches an existing
- * accepted pattern in the codebase.
+ * imap-send through emailapi). No SES fallback: in practice emailapi
+ * returns `400 email_sent_failed` AFTER MailSlurp has already queued the
+ * message — falling back to SES at that point delivered a second copy
+ * (observed during dev QA). Treating the distribution path as the single
+ * source of truth keeps it one email per recipient.
  *
- * All errors are caught and logged. The share link is already persisted
- * before this fires, so even if both paths fail the sender can still copy
- * the URL manually from the ShareDrawer.
+ * If the sender has no provisioned mailbox, we deliberately fail the send
+ * loud and log it — share linking is a write-equivalent action and
+ * `mail_box_detail` should always be present for any user with edit access
+ * to a file. A missing mailbox indicates a misconfigured account, not a
+ * normal flow.
+ *
+ * The share link is already persisted before this fires, so even if the
+ * send fails the sender can still copy the URL manually from the
+ * ShareDrawer.
  */
 const sendShareEmail = async ({
   link, recipient, file, sender, moduledata,
@@ -261,49 +265,41 @@ const sendShareEmail = async ({
     has_moduledata: !!moduledata,
   });
 
-  // Path A — distribution via emailapi (preferred, no anti-spoof issue)
-  if (sender?.mail_box_detail?.id && moduledata) {
-    try {
-      await sendShareEmailViaDistribution({
-        link, recipient, file, sender, moduledata,
-      });
-      // eslint-disable-next-line no-console
-      console.info('[share_link_email_sent_via_distribution]:', {
-        to: recipient.email, from: sender.mail_box_detail.email_address,
-      });
-      return;
-    } catch (err) {
-      // eslint-disable-next-line no-console
-      console.warn(
-        '[share_link_email_distribution_failed_fallback_ses]:',
-        err?.response?.data?.message || err?.message || err,
-      );
-      // fall through to SES
-    }
+  // Skip if we can't do the distribution send. Don't fall back to SES —
+  // SES (info@zillit.com → @zillit.com) gets dropped by anti-spoof, and
+  // a successful-but-undelivered send is worse than a logged skip.
+  if (!sender?.mail_box_detail?.id) {
+    // eslint-disable-next-line no-console
+    console.warn('[share_link_email_skipped_no_mailbox]:', {
+      to: recipient.email, sender_id: String(sender?._id || ''),
+    });
+    return;
+  }
+  if (!moduledata) {
+    // eslint-disable-next-line no-console
+    console.warn('[share_link_email_skipped_no_moduledata]:', {
+      to: recipient.email,
+    });
+    return;
   }
 
-  // Path B — direct SES fallback (system sender = info@zillit.com)
   try {
-    const ses = new SesService({
-      to: recipient.email,
-      subject: `${sender?.full_name || sender?.email || 'A Zillit user'} shared "${file.file_name}" with you`,
-      html: buildEmailHtml({
-        link, recipient, file, sender,
-      }),
+    await sendShareEmailViaDistribution({
+      link, recipient, file, sender, moduledata,
     });
-    const sesResult = await ses.sendEmail();
     // eslint-disable-next-line no-console
-    console.info('[share_link_email_sent_via_ses]:', {
-      to: recipient.email,
-      message_id: sesResult?.messageId,
-      accepted: sesResult?.accepted,
-      rejected: sesResult?.rejected,
-      response: sesResult?.response,
+    console.info('[share_link_email_sent_via_distribution]:', {
+      to: recipient.email, from: sender.mail_box_detail.email_address,
     });
   } catch (err) {
-    // Final fallback failure — non-fatal, link still exists in DB.
+    // emailapi /v2/imap-send often returns 400 `email_sent_failed` AFTER
+    // MailSlurp has already accepted the message — so a "failure" here is
+    // typically not a true delivery failure. Log loudly but don't retry.
     // eslint-disable-next-line no-console
-    console.error('[share_link_email_failed]:', err?.message || err);
+    console.warn('[share_link_email_distribution_failed]:', {
+      to: recipient.email,
+      error: err?.response?.data?.message || err?.message || String(err),
+    });
   }
 };
 
