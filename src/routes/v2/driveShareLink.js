@@ -16,10 +16,17 @@ const drivePostAccess = postingAccess('tools_section', null, 'drive_tool');
 
 // ───── Authenticated endpoints ─────────────────────────────────────────
 //
+// NB: path uses `email-share-link*` (not `share-link*`) to avoid colliding
+// with the existing `POST /files/:fileId/share-link` route in driveFile.js,
+// which generates a short-lived S3 presigned URL ("share via copy link").
+// That handler is mounted at /drive/files BEFORE this router and would
+// otherwise shadow ours — silently returning a presigned URL on every
+// share-via-email call.
+
 // Create a share link on a file. Sends emails to listed recipients (if any)
 // and returns the link + per-recipient URLs for copy-paste.
 router.post(
-  '/files/:fileId/share-link',
+  '/files/:fileId/email-share-link',
   objectIdValidator(['fileId']),
   moduledata,
   checkAccess,
@@ -31,7 +38,7 @@ router.post(
 // List all active (not revoked) share links for a file. Used by the
 // ShareDrawer "Active links" tab so the creator can see / revoke them.
 router.get(
-  '/files/:fileId/share-links',
+  '/files/:fileId/email-share-links',
   objectIdValidator(['fileId']),
   moduledata,
   checkAccess,
@@ -42,7 +49,7 @@ router.get(
 // Revoke a specific share link. Only the link's creator or a user with
 // edit permission on the underlying file can revoke.
 router.post(
-  '/share-links/:linkId/revoke',
+  '/email-share-links/:linkId/revoke',
   objectIdValidator(['linkId']),
   moduledata,
   checkAccess,
