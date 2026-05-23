@@ -608,6 +608,33 @@ const streamContent = async ({ params, query, req, res }) => {
   // validatePublicToken (revoked / expired / max_views gates).
   res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
 
+  // Narrow CSP frame-ancestors + drop X-Frame-Options for this endpoint.
+  //
+  // Helmet sets an app-wide `Content-Security-Policy: ...frame-ancestors 'self'`
+  // and `X-Frame-Options: SAMEORIGIN`. PDFs are rendered via <iframe> in
+  // the public viewer at https://*.zillit.com (and localhost during dev),
+  // so the 'self' restriction blocks the iframe load cross-origin —
+  // Chrome reports `(blocked:origin)` in the Network panel.
+  //
+  // We could strip the headers entirely (token validation is the real
+  // gate, and frame-ancestors on a binary file stream protects against
+  // nothing meaningful — any site that can iframe the URL must already
+  // hold the share token, and could just as easily <img>/<video>/<curl>
+  // the same URL). But "more locked is better" — allowlist Zillit
+  // domains (the only legitimate viewer hosts) instead.
+  //
+  // `frame-ancestors` here covers: dev.zillit.com, qa.zillit.com,
+  // web.zillit.com, and any *.zillit.com subdomain plus localhost for
+  // dev. Anywhere else still gets blocked at the embed layer.
+  //
+  // X-Frame-Options is removed because legacy spec; CSP frame-ancestors
+  // supersedes it and Chrome can be inconsistent when both are present.
+  res.setHeader(
+    'Content-Security-Policy',
+    "frame-ancestors 'self' https://*.zillit.com http://localhost:* http://127.0.0.1:*;",
+  );
+  res.removeHeader('X-Frame-Options');
+
   // Inline disposition — same as the presigned URL config, prevents the
   // browser from offering a Save dialog when the URL is opened directly.
   const safeName = encodeURIComponent(file.file_name || 'file');
