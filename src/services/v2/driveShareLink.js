@@ -608,6 +608,25 @@ const streamContent = async ({ params, query, req, res }) => {
   // validatePublicToken (revoked / expired / max_views gates).
   res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
 
+  // Strip CSP + X-Frame-Options from this response.
+  //
+  // Helmet sets app-wide `Content-Security-Policy: ...frame-ancestors 'self'`
+  // and `X-Frame-Options: SAMEORIGIN` (or DENY). For a streamed file the
+  // CSP doesn't constrain anything meaningful (no HTML content), but
+  // frame-ancestors blocks cross-origin pages from <iframe>'ing this
+  // resource — which IS exactly what the public viewer does for PDFs.
+  // Without this fix, dev.zillit.com loading an iframe src pointing
+  // at driveapi-dev.zillit.com gets `(blocked:origin)` in Chrome.
+  // Local dev (localhost:5174) hit the same issue too once the local
+  // viewer goes through this code path.
+  //
+  // We could allowlist `frame-ancestors https://*.zillit.com` to be
+  // more surgical, but every other anti-leak gate already covers this
+  // endpoint (token validation, revoke, expiry, max_views) and CSP on
+  // a binary stream has no semantic value. Drop them outright.
+  res.removeHeader('Content-Security-Policy');
+  res.removeHeader('X-Frame-Options');
+
   // Inline disposition — same as the presigned URL config, prevents the
   // browser from offering a Save dialog when the URL is opened directly.
   const safeName = encodeURIComponent(file.file_name || 'file');
