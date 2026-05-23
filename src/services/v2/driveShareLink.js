@@ -608,23 +608,31 @@ const streamContent = async ({ params, query, req, res }) => {
   // validatePublicToken (revoked / expired / max_views gates).
   res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
 
-  // Strip CSP + X-Frame-Options from this response.
+  // Narrow CSP frame-ancestors + drop X-Frame-Options for this endpoint.
   //
-  // Helmet sets app-wide `Content-Security-Policy: ...frame-ancestors 'self'`
-  // and `X-Frame-Options: SAMEORIGIN` (or DENY). For a streamed file the
-  // CSP doesn't constrain anything meaningful (no HTML content), but
-  // frame-ancestors blocks cross-origin pages from <iframe>'ing this
-  // resource — which IS exactly what the public viewer does for PDFs.
-  // Without this fix, dev.zillit.com loading an iframe src pointing
-  // at driveapi-dev.zillit.com gets `(blocked:origin)` in Chrome.
-  // Local dev (localhost:5174) hit the same issue too once the local
-  // viewer goes through this code path.
+  // Helmet sets an app-wide `Content-Security-Policy: ...frame-ancestors 'self'`
+  // and `X-Frame-Options: SAMEORIGIN`. PDFs are rendered via <iframe> in
+  // the public viewer at https://*.zillit.com (and localhost during dev),
+  // so the 'self' restriction blocks the iframe load cross-origin —
+  // Chrome reports `(blocked:origin)` in the Network panel.
   //
-  // We could allowlist `frame-ancestors https://*.zillit.com` to be
-  // more surgical, but every other anti-leak gate already covers this
-  // endpoint (token validation, revoke, expiry, max_views) and CSP on
-  // a binary stream has no semantic value. Drop them outright.
-  res.removeHeader('Content-Security-Policy');
+  // We could strip the headers entirely (token validation is the real
+  // gate, and frame-ancestors on a binary file stream protects against
+  // nothing meaningful — any site that can iframe the URL must already
+  // hold the share token, and could just as easily <img>/<video>/<curl>
+  // the same URL). But "more locked is better" — allowlist Zillit
+  // domains (the only legitimate viewer hosts) instead.
+  //
+  // `frame-ancestors` here covers: dev.zillit.com, qa.zillit.com,
+  // web.zillit.com, and any *.zillit.com subdomain plus localhost for
+  // dev. Anywhere else still gets blocked at the embed layer.
+  //
+  // X-Frame-Options is removed because legacy spec; CSP frame-ancestors
+  // supersedes it and Chrome can be inconsistent when both are present.
+  res.setHeader(
+    'Content-Security-Policy',
+    "frame-ancestors 'self' https://*.zillit.com http://localhost:* http://127.0.0.1:*;",
+  );
   res.removeHeader('X-Frame-Options');
 
   // Inline disposition — same as the presigned URL config, prevents the
