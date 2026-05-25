@@ -1,0 +1,50 @@
+import express from 'express';
+
+import DriveShareLinkController from '../../controllers/v2/driveShareLink.js';
+
+// Public (no-auth) share-link routes. These intentionally skip moduledata
+// / checkAccess / viewing-access — the URL token IS the credential.
+//
+// All three endpoints route through validatePublicToken in the service so
+// every call enforces:
+//   - link exists & not revoked
+//   - not expired
+//   - max_views not exceeded
+//
+// The recipient_token (?r=<token>) is optional but recommended — when
+// present we attribute the view to a specific recipient for forensic
+// trace; when missing we still bump the top-level counter.
+const router = express.Router();
+
+// Viewer page metadata: file info + permission flags + watermark text.
+// Does NOT return a stream URL — that's a separate call so the URL stays
+// fresh on each load (5-min TTL).
+router.get('/share/:token', DriveShareLinkController.getViewerData);
+
+// Short-lived presigned S3 GET URL for the underlying media. Records the
+// view (counts against max_views, logs recipient + IP + UA).
+// DEPRECATED for the public viewer — clients should use /stream-content
+// (server-side proxy) instead so the raw S3 URL is never exposed.
+// Kept for backwards compatibility with any older client.
+router.get('/share/:token/stream', DriveShareLinkController.getStreamUrl);
+
+// Server-side proxied stream. The browser's <video src> / <img src> /
+// <iframe src> points here directly; drive forwards Range requests to S3
+// and pipes the body through. The underlying presigned URL is never
+// exposed to the client, so devtools "copy as URL" gives an attacker a
+// share-link-gated URL (revocable, view-limited) rather than raw S3
+// access.
+router.get('/share/:token/stream-content', DriveShareLinkController.streamContent);
+
+// Collabora viewer config for Office files (docx, xlsx, pptx, etc.).
+// Returns { collabora_url, wopi_src, access_token, ... } so the FE can
+// embed the Collabora iframe. Token has canEdit:false + canDownload:false
+// hard-coded, so the same WOPI host endpoints used by the in-app editor
+// safely serve public-share traffic.
+router.get('/share/:token/office-viewer', DriveShareLinkController.getOfficeViewerConfig);
+
+// Lightweight ping for the viewer to call on page load (separate from
+// /stream so analytics events don't consume presigned URL allocations).
+router.post('/share/:token/view', DriveShareLinkController.recordView);
+
+export default router;
