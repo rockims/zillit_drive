@@ -466,11 +466,18 @@ const getFolders = async ({ user, project, query }) => {
     // Resolve via DriveFolderAccess: rows where created_by=me and user_id≠me
     // yield the set of folder_ids I've actually shared. Narrow to created_by=me
     // so we don't surface folders I merely re-granted on behalf of someone else.
+    //
+    // ZL-19251 / ZL-19248: filter out soft-deleted access rows (`deleted_on:
+    // 0`). Unshare uses `softDeleteFolderAccess` which only sets
+    // `deleted_on != 0` — the row stays in the collection. Without this
+    // guard, revoking a share leaves the folder visible under the Shared
+    // By Me filter forever (the symptom Vishal reported on the 25th).
     const sharedFolderIds = await DriveFolderAccessRepository.distinctFolderIds({
       filters: {
         project_id: project._id,
         user_id: { $ne: user._id },
         created_by: user._id,
+        deleted_on: 0,
       },
     });
     andFilters.push({ created_by: user._id, _id: { $in: sharedFolderIds } });
@@ -700,12 +707,18 @@ const getDriveContents = async ({ user, project, query }) => {
   } else if (listingQuery.quickFilter === 'shared_by_me') {
     // ZL-19247: items I own (folders + files) that I have shared with at least
     // one other user. Two parallel lookups against the access collections.
+    //
+    // ZL-19251 / ZL-19248: filter out soft-deleted access rows on BOTH
+    // sides. Unshare uses `softDeleteFolderAccess` /
+    // `softDeleteFileAccess` which only sets `deleted_on != 0`; without
+    // this guard, revoked items still surface under Shared By Me.
     const [sharedFolderIds, sharedFileIds] = await Promise.all([
       DriveFolderAccessRepository.distinctFolderIds({
         filters: {
           project_id: project._id,
           user_id: { $ne: user._id },
           created_by: user._id,
+          deleted_on: 0,
         },
       }),
       DriveFileAccessRepository.distinctFileIds({
@@ -713,6 +726,7 @@ const getDriveContents = async ({ user, project, query }) => {
           project_id: project._id,
           user_id: { $ne: user._id },
           granted_by: user._id,
+          deleted_on: 0,
         },
       }),
     ]);

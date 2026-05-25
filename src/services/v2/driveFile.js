@@ -515,11 +515,17 @@ const getFiles = async ({ user, project, query }) => {
     // Resolve via DriveFileAccess: rows where granted_by=me and user_id≠me yield
     // the set of file_ids I've actually shared. Then narrow to created_by=me so
     // we don't surface files I merely re-granted on behalf of someone else.
+    //
+    // ZL-19251 / ZL-19248: filter out soft-deleted access rows
+    // (`deleted_on: 0`). Unshare uses `softDeleteFileAccess` which only
+    // sets `deleted_on != 0` — without this guard, revoking a share
+    // leaves the file visible under Shared By Me indefinitely.
     const sharedFileIds = await DriveFileAccessRepository.distinctFileIds({
       filters: {
         project_id: project._id,
         user_id: { $ne: user._id },
         granted_by: user._id,
+        deleted_on: 0,
       },
     });
     andFilters.push({ created_by: user._id, _id: { $in: sharedFileIds } });
