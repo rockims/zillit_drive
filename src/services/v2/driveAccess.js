@@ -687,6 +687,24 @@ const setFolderAccessList = async ({
     } catch (err) {
       console.error('[folder_access_revoke_silent_failed]:', err.message);
     }
+
+    // ZL-19251 / ZL-19248: counterpart to the `drive:folder:shared`
+    // emit above. Without this, revoking a folder share went silent
+    // on the socket bus — the sharer's "Shared By Me" filter stayed
+    // stale until they manually refreshed (the symptom Vishal
+    // reported on 2026-05-25). Mirrors the shared-event's shape:
+    // same channel (__admin_events__), same project room, same
+    // `data.folder` payload; switches `shared_with` →
+    // `unshared_from` and uses `:unshared` for the event verb.
+    socketClient('__admin_events__', {
+      event: 'drive:folder:unshared',
+      room: `${project._id.toString()}_room`,
+      data: {
+        project_id: project._id,
+        folder,
+        unshared_from: revokedUserIds.map((id) => id.toString()),
+      },
+    });
   }
 
   return getFolderAccessList({
