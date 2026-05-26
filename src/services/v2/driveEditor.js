@@ -183,6 +183,16 @@ const escapeHtml = (str) => {
     .replace(/'/g, '&#39;');
 };
 
+// Exported so driveShareLink.js can build the same Collabora viewer
+// config for public share-link recipients without duplicating the
+// discovery + URL construction logic.
+export {
+  COLLABORA_URL,
+  WOPI_BASE_URL,
+  EDITABLE_EXTENSIONS,
+  getCollaboraEditorUrl,
+};
+
 export default {
   getEditorConfig,
   generateEditorPageToken,
