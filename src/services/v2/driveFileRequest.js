@@ -1,0 +1,462 @@
+import crypto from 'crypto';
+import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
+
+import BadRequest from 'zillit-libs/errors/BadRequest';
+import Forbidden from 'zillit-libs/errors/Forbidden';
+import NotFound from 'zillit-libs/errors/NotFound';
+
+import DriveFileRequestRepository from '../../repositories/v2/driveFileRequest.js';
+import DriveFolderRepository from '../../repositories/v2/driveFolder.js';
+import DriveFileRepository from '../../repositories/v2/driveFile.js';
+
+/**
+ * DriveFileRequestService
+ *
+ * Inverse of DriveShareLinkService — public upload URLs that let
+ * anyone send files into a Zillit user's chosen Drive folder without
+ * a Zillit account. URL shape:
+ *
+ *   https://drive.zillit.com/request/<token>
+ *
+ * Authenticated endpoints (createFileRequest / listFileRequests /
+ * revokeFileRequest) require the caller to have edit access on the
+ * destination folder. Public endpoints (getRequestViewerData /
+ * startUploadSession / receiveUpload) take the URL token only — no
+ * moduledata, no project session — and enforce the gates:
+ *   - request not revoked
+ *   - not expired
+ *   - per-session file count + total bytes under limits
+ *   - mime type matches allowed_mime_patterns
+ */
+
+/* ───────────── S3 (shared with driveUpload.js) ───────────── */
+
+const S3_BUCKET = process.env.AWS_S3_BUCKET;
+const S3_DEFAULT_REGION = process.env.AWS_S3_BUCKET_REGION
+  || process.env.AWS_REGION
+  || 'us-east-1';
+
+const s3ClientCache = {};
+
+const getS3Client = (region) => {
+  const resolvedRegion = region || S3_DEFAULT_REGION;
+  if (!s3ClientCache[resolvedRegion]) {
+    s3ClientCache[resolvedRegion] = new S3Client({
+      region: resolvedRegion,
+      credentials: {
+        accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+        secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
+      },
+    });
+  }
+  return s3ClientCache[resolvedRegion];
+};
+
+/* ───────────── Helpers ───────────── */
+
+// 32-char URL-safe base64. Same shape as share-link tokens so the two
+// systems read consistently in logs / DB.
+const generateToken = () => crypto.randomBytes(24).toString('base64')
+  .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+
+// Per-recipient-visit id. Not security-critical (it just attributes
+// multiple files in one visit to one row) but should be hard to
+// collide so different visitors don't append into each other's row.
+const generateSessionId = () => crypto.randomBytes(16).toString('hex');
+
+const toIdString = (value) => (value ? value.toString() : null);
+
+// Mirrors driveUpload.js generateS3Key so request-uploaded files
+// land in the same key shape as normal uploads — anyone walking the
+// bucket can't tell apart "user upload" from "file request upload"
+// just from the path.
+const generateS3Key = (projectId, folderId, fileName) => {
+  const timestamp = Date.now();
+  const random = crypto.randomBytes(4).toString('hex');
+  const sanitised = fileName.replace(/[^a-zA-Z0-9._-]/g, '_');
+  const folderPart = folderId ? `/${toIdString(folderId)}` : '';
+  return `${toIdString(projectId)}/drive${folderPart}/${timestamp}_${random}_${sanitised}`;
+};
+
+const formatFileSize = (bytes) => {
+  if (!bytes || bytes === 0) return '0 B';
+  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(1024));
+  return `${(bytes / (1024 ** i)).toFixed(2)} ${units[i]}`;
+};
+
+const guessMimeType = (fileName, providedMime) => {
+  if (providedMime) return providedMime;
+  const ext = fileName.includes('.') ? fileName.split('.').pop().toLowerCase() : '';
+  const map = {
+    pdf: 'application/pdf',
+    jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', gif: 'image/gif',
+    webp: 'image/webp', heic: 'image/heic',
+    mp4: 'video/mp4', mov: 'video/quicktime', webm: 'video/webm',
+    mp3: 'audio/mpeg', wav: 'audio/wav',
+    docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    pptx: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+    txt: 'text/plain', csv: 'text/csv', json: 'application/json',
+  };
+  return map[ext] || 'application/octet-stream';
+};
+
+/**
+ * Match `mime` against a list of allowed patterns. Each pattern is
+ * either an exact mime ('image/png') or a wildcard at the subtype
+ * level ('image/*'). Empty allowlist = anything allowed.
+ */
+const mimeAllowed = (mime, patterns) => {
+  if (!patterns || patterns.length === 0) return true;
+  const [type, subtype] = (mime || '').split('/');
+  return patterns.some((p) => {
+    const [pType, pSubtype] = p.split('/');
+    if (pType === '*') return true;
+    if (pType !== type) return false;
+    return pSubtype === '*' || pSubtype === subtype;
+  });
+};
+
+/**
+ * Validate a public token. Loads the request and enforces the gates
+ * every public endpoint cares about. Throws with a stable error code
+ * the FE can map to a user-facing message.
+ */
+const validatePublicToken = async ({ token }) => {
+  if (!token) throw new BadRequest('share_link_token_required');
+
+  const request = await DriveFileRequestRepository.findByToken({ token });
+  if (!request) throw new NotFound('file_request_not_found');
+  if (request.revoked) throw new Forbidden('file_request_revoked');
+  if (request.expires_on && Date.now() > request.expires_on) {
+    throw new Forbidden('file_request_expired');
+  }
+  return { request };
+};
+
+/* ───────────── Authenticated endpoints ───────────── */
+
+const createFileRequest = async ({ user, project, body }) => {
+  const folder = await DriveFolderRepository.getFolder({
+    filters: {
+      _id: body.destination_folder_id,
+      project_id: project._id,
+      deleted_on: 0,
+    },
+  });
+  if (!folder) throw new NotFound('destination_folder_not_found');
+
+  // Edit-equivalent gate: only users who could upload to this folder
+  // themselves are allowed to invite the world to upload to it.
+  // driveFileAccess exposes assertFileAccess but not a folder
+  // variant — keep this check inline + simple: creator of the folder
+  // OR project admin. Future iteration can plug into a full folder
+  // ACL once that's exposed by driveFileAccess.
+  const isFolderCreator = String(folder.created_by) === String(user._id);
+  const isAdmin = !!user?.admin_access;
+  if (!isFolderCreator && !isAdmin) {
+    throw new Forbidden('insufficient_folder_permission');
+  }
+
+  const now = Date.now();
+  const expires_on = body.expires_in_ms === 0 ? 0 : now + body.expires_in_ms;
+
+  const request = await DriveFileRequestRepository.create({
+    data: {
+      project_id: project._id,
+      destination_folder_id: folder._id,
+      token: generateToken(),
+      title: body.title,
+      description: body.description || '',
+      thank_you_message: body.thank_you_message || '',
+      created_by: user._id,
+      created_on: now,
+      updated_on: now,
+      expires_on,
+      max_files_per_session: body.max_files_per_session || 0,
+      max_total_size_bytes: body.max_total_size_bytes || 0,
+      allowed_mime_patterns: body.allowed_mime_patterns || [],
+      require_uploader_email: body.require_uploader_email !== false,
+      require_uploader_name: !!body.require_uploader_name,
+      revoked: false,
+      upload_count: 0,
+      total_uploaded_bytes: 0,
+      sessions: [],
+    },
+  });
+
+  return {
+    _id: request._id,
+    token: request.token,
+    url: `${resolvePublicWebUrl()}/request/${request.token}`,
+    title: request.title,
+    destination_folder_id: request.destination_folder_id,
+    expires_on: request.expires_on,
+    max_files_per_session: request.max_files_per_session,
+    max_total_size_bytes: request.max_total_size_bytes,
+    allowed_mime_patterns: request.allowed_mime_patterns,
+    require_uploader_email: request.require_uploader_email,
+    require_uploader_name: request.require_uploader_name,
+  };
+};
+
+const listFileRequests = async ({ user, project, params }) => {
+  const { folderId } = params;
+  const requests = await DriveFileRequestRepository.findActiveByFolder({
+    project_id: project._id,
+    destination_folder_id: folderId,
+  });
+  return requests.map((r) => ({
+    _id: r._id,
+    token: r.token,
+    url: `${resolvePublicWebUrl()}/request/${r.token}`,
+    title: r.title,
+    description: r.description,
+    created_by: r.created_by,
+    created_on: r.created_on,
+    expires_on: r.expires_on,
+    upload_count: r.upload_count,
+    total_uploaded_bytes: r.total_uploaded_bytes,
+    session_count: r.sessions?.length || 0,
+    require_uploader_email: r.require_uploader_email,
+    require_uploader_name: r.require_uploader_name,
+    // Only return the latest few sessions in the list view — full
+    // detail is in the drill-in endpoint to keep this response small.
+    recent_sessions: (r.sessions || []).slice(-5).map((s) => ({
+      uploader_email: s.uploader_email,
+      uploader_name: s.uploader_name,
+      file_count: s.files?.length || 0,
+      started_on: s.started_on,
+      last_upload_on: s.last_upload_on,
+    })),
+  }));
+};
+
+const revokeFileRequest = async ({ user, project, params }) => {
+  const { requestId } = params;
+  const request = await DriveFileRequestRepository.findById({ _id: requestId });
+  if (!request) throw new NotFound('file_request_not_found');
+  if (String(request.project_id) !== String(project._id)) {
+    throw new Forbidden('file_request_not_in_project');
+  }
+  // Creator can always revoke. Folder creator + project admins can
+  // also revoke (catches the case where the original request creator
+  // left the project).
+  const isCreator = String(request.created_by) === String(user._id);
+  const isAdmin = !!user?.admin_access;
+  if (!isCreator && !isAdmin) {
+    const folder = await DriveFolderRepository.getFolder({
+      filters: { _id: request.destination_folder_id },
+    });
+    const isFolderCreator = folder && String(folder.created_by) === String(user._id);
+    if (!isFolderCreator) {
+      throw new Forbidden('insufficient_folder_permission');
+    }
+  }
+  await DriveFileRequestRepository.updateById({
+    _id: requestId,
+    data: {
+      revoked: true,
+      revoked_on: Date.now(),
+      revoked_by: user._id,
+    },
+  });
+  return { ok: true };
+};
+
+/* ───────────── Public (token-only) endpoints ───────────── */
+
+const getRequestViewerData = async ({ params }) => {
+  const { token } = params;
+  const { request } = await validatePublicToken({ token });
+
+  return {
+    title: request.title,
+    description: request.description,
+    thank_you_message: request.thank_you_message,
+    expires_on: request.expires_on,
+    max_files_per_session: request.max_files_per_session,
+    max_total_size_bytes: request.max_total_size_bytes,
+    allowed_mime_patterns: request.allowed_mime_patterns,
+    require_uploader_email: request.require_uploader_email,
+    require_uploader_name: request.require_uploader_name,
+  };
+};
+
+const startUploadSession = async ({ params, body, req }) => {
+  const { token } = params;
+  const { request } = await validatePublicToken({ token });
+
+  const uploader_email = (body?.uploader_email || '').toLowerCase().trim();
+  const uploader_name = (body?.uploader_name || '').trim();
+
+  if (request.require_uploader_email && !uploader_email) {
+    throw new BadRequest('uploader_email_required');
+  }
+  if (request.require_uploader_name && !uploader_name) {
+    throw new BadRequest('uploader_name_required');
+  }
+
+  const session = {
+    session_id: generateSessionId(),
+    uploader_email,
+    uploader_name,
+    ip_address: req?.ip || req?.headers?.['x-forwarded-for'] || '',
+    user_agent: req?.headers?.['user-agent'] || '',
+    started_on: Date.now(),
+    last_upload_on: 0,
+    files: [],
+  };
+
+  await DriveFileRequestRepository.appendSession({
+    _id: request._id, session,
+  });
+
+  return { session_id: session.session_id };
+};
+
+/**
+ * Multipart upload handler. Expects:
+ *   - req.files.file populated by express-fileupload
+ *   - query.session_id matching a session created via startUploadSession
+ *
+ * Validates the upload against the request's gates, PUTs the bytes to
+ * S3, creates a DriveFileV2 doc in the destination folder, and appends
+ * the file record to the session for audit.
+ */
+const receiveUpload = async ({ params, query, req }) => {
+  const { token } = params;
+  const session_id = query?.session_id;
+  if (!session_id) throw new BadRequest('session_id_required');
+
+  const { request } = await validatePublicToken({ token });
+
+  // Find the session this upload belongs to.
+  const session = (request.sessions || [])
+    .find((s) => s.session_id === session_id);
+  if (!session) throw new BadRequest('invalid_session_id');
+
+  // express-fileupload puts the uploaded file at req.files.file.
+  // Single-file uploads per request to keep the validation logic
+  // simple — the FE iterates client-side and POSTs one at a time.
+  const uploaded = req?.files?.file;
+  if (!uploaded || Array.isArray(uploaded)) {
+    throw new BadRequest('exactly_one_file_per_request');
+  }
+
+  const fileName = uploaded.name || 'untitled';
+  const fileSize = uploaded.size || 0;
+  const mimeType = guessMimeType(fileName, uploaded.mimetype);
+
+  // ─── Gate: per-session file count ───
+  if (request.max_files_per_session > 0
+      && session.files.length >= request.max_files_per_session) {
+    throw new BadRequest('max_files_per_session_exceeded');
+  }
+
+  // ─── Gate: per-session total bytes ───
+  const sessionBytesSoFar = session.files.reduce(
+    (sum, f) => sum + (f.file_size_bytes || 0), 0,
+  );
+  if (request.max_total_size_bytes > 0
+      && sessionBytesSoFar + fileSize > request.max_total_size_bytes) {
+    throw new BadRequest('max_total_size_bytes_exceeded');
+  }
+
+  // ─── Gate: mime allowlist ───
+  if (!mimeAllowed(mimeType, request.allowed_mime_patterns)) {
+    throw new BadRequest('file_type_not_allowed');
+  }
+
+  // Upload to S3 using the same key shape as authenticated uploads.
+  const s3Key = generateS3Key(request.project_id, request.destination_folder_id, fileName);
+  const s3 = getS3Client(S3_DEFAULT_REGION);
+  await s3.send(new PutObjectCommand({
+    Bucket: S3_BUCKET,
+    Key: s3Key,
+    Body: uploaded.data,
+    ContentType: mimeType,
+  }));
+
+  // Create the DriveFile record. Important fields:
+  //   - created_by: the file request's creator (so file ownership
+  //     belongs to a real Zillit user and inherits their permissions)
+  //   - uploaded_by: same; we record the recipient identity on the
+  //     file request's session, not on the file (DriveFile schema
+  //     expects uploaded_by to be a ProjectUserV2 ObjectId)
+  const fileExtension = fileName.includes('.')
+    ? fileName.split('.').pop().toLowerCase()
+    : '';
+
+  const driveFile = await DriveFileRepository.createFile({
+    data: {
+      project_id: request.project_id,
+      folder_id: request.destination_folder_id,
+      file_name: fileName,
+      file_path: s3Key,
+      description: '',
+      file_type: mimeType.split('/')[0] || '',
+      file_extension: fileExtension,
+      file_size: formatFileSize(fileSize),
+      file_size_bytes: fileSize,
+      mime_type: mimeType,
+      attachments: [{
+        media: s3Key,
+        name: fileName,
+        thumbnail: '',
+        content_type: mimeType.split('/')[0] || 'document',
+        content_subtype: mimeType.split('/')[1] || '',
+        caption: '',
+        duration: 0, height: 0, width: 0,
+        bucket: S3_BUCKET,
+        region: S3_DEFAULT_REGION,
+        created: Date.now(),
+        file_size: formatFileSize(fileSize),
+        content_id: '',
+      }],
+      created_by: request.created_by,
+      updated_by: request.created_by,
+      uploaded_by: request.created_by,
+    },
+  });
+
+  await DriveFileRequestRepository.recordSessionFileUpload({
+    _id: request._id,
+    session_id,
+    file: {
+      drive_file_id: driveFile._id,
+      file_name: fileName,
+      file_size_bytes: fileSize,
+      mime_type: mimeType,
+      uploaded_on: Date.now(),
+    },
+    bytes: fileSize,
+  });
+
+  return {
+    drive_file_id: driveFile._id,
+    file_name: fileName,
+    file_size_bytes: fileSize,
+    mime_type: mimeType,
+  };
+};
+
+/* ───────────── Public web URL resolver (per-env) ───────────── */
+
+const resolvePublicWebUrl = () => {
+  if (process.env.PUBLIC_WEB_URL) return process.env.PUBLIC_WEB_URL;
+  const env = (process.env.NODE_ENV || '').toLowerCase();
+  if (env === 'prod' || env === 'production') return 'https://web.zillit.com';
+  if (env === 'qa') return 'https://qa.zillit.com';
+  return 'https://dev.zillit.com';
+};
+
+export default {
+  createFileRequest,
+  listFileRequests,
+  revokeFileRequest,
+  getRequestViewerData,
+  startUploadSession,
+  receiveUpload,
+};

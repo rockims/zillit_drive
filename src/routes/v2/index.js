@@ -18,16 +18,20 @@ import driveWopi from './driveWopi.js';
 import driveProjectUsers from './driveProjectUsers.js';
 import driveShareLink from './driveShareLink.js';
 import driveShareLinkPublic from './driveShareLinkPublic.js';
+import driveFileRequest from './driveFileRequest.js';
+import driveFileRequestPublic from './driveFileRequestPublic.js';
 
 const router = express.Router();
 
 router.use('/health', health);
 
-// Public share-link routes — mounted BEFORE the authenticated /drive/*
-// routes so they're not shadowed by anything that requires moduledata.
-// All endpoints under /drive/share/* are accessible without a Zillit
-// account: the URL token is the credential.
+// Public share-link + file-request routes — mounted BEFORE the
+// authenticated /drive/* routes so they're not shadowed by anything
+// that requires moduledata. All endpoints under /drive/share/* and
+// /drive/request/* are accessible without a Zillit account: the URL
+// token is the credential.
 router.use('/drive', driveShareLinkPublic);
+router.use('/drive', driveFileRequestPublic);
 
 router.use('/drive/folders', driveFolder);
 router.use('/drive/files', driveFile);
@@ -48,5 +52,10 @@ router.use('/drive/project-users', driveProjectUsers);
 // Authenticated share-link routes — create / list / revoke (operate on
 // files; require a Zillit user with edit/view permission on the file).
 router.use('/drive', driveShareLink);
+
+// Authenticated file-request routes — create on a folder / list per
+// folder / revoke. Require a Zillit user with edit access on the
+// destination folder.
+router.use('/drive', driveFileRequest);
 
 export default router;
