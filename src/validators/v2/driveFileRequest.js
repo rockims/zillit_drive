@@ -39,6 +39,13 @@ const createFileRequest = Joi.object({
 
   require_uploader_email: Joi.boolean().default(true),
   require_uploader_name: Joi.boolean().default(false),
+
+  // Optional list of emails to send the upload link to at creation
+  // time. Empty = the sender just copies the link to share manually.
+  // Capped at 50 so one request can't fan out into a mass mailer.
+  recipients: Joi.array().items(Joi.string().email().lowercase().trim())
+    .max(50)
+    .default([]),
 });
 
 // Body shape when the recipient starts an upload visit. Some fields

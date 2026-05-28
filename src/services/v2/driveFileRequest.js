@@ -1,13 +1,16 @@
 import crypto from 'crypto';
+import axios from 'axios';
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
 
 import BadRequest from 'zillit-libs/errors/BadRequest';
 import Forbidden from 'zillit-libs/errors/Forbidden';
 import NotFound from 'zillit-libs/errors/NotFound';
+import EncryptDecryptUtil from 'zillit-libs/utils/encrypt-decrypt';
 
 import DriveFileRequestRepository from '../../repositories/v2/driveFileRequest.js';
 import DriveFolderRepository from '../../repositories/v2/driveFolder.js';
 import DriveFileRepository from '../../repositories/v2/driveFile.js';
+import { getUrls } from './config.js';
 
 /**
  * DriveFileRequestService
@@ -135,9 +138,149 @@ const validatePublicToken = async ({ token }) => {
   return { request };
 };
 
+/* ───────────── Invite email (distribution path) ───────────── */
+
+const escapeHtml = (s) => String(s).replace(/[&<>"']/g, (c) => ({
+  '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+}[c]));
+
+// Build the HTML body for the upload-invite email. This is the inverse
+// of the share-link email — instead of "X shared a file with you" it's
+// "X is requesting files from you" with an "Upload files" CTA.
+const buildRequestEmailHtml = ({ request, url, sender }) => {
+  const senderName = sender?.full_name || sender?.first_name || sender?.email || 'A Zillit user';
+  const expiryText = request.expires_on > 0
+    ? `This upload link expires on ${new Date(request.expires_on).toUTCString()}.`
+    : 'This upload link does not expire.';
+  const description = request.description
+    ? `<p style="margin:16px 0;color:#333;">${escapeHtml(request.description)}</p>`
+    : '';
+
+  return `
+<!doctype html>
+<html><body style="font-family:-apple-system,Segoe UI,Roboto,sans-serif;color:#111;max-width:560px;margin:0 auto;padding:24px;">
+  <h2 style="margin:0 0 16px;">${escapeHtml(senderName)} is requesting files from you</h2>
+  <p style="margin:0 0 8px;color:#555;">
+    via <strong>Zillit Drive</strong>
+  </p>
+  <div style="border:1px solid #eee;border-radius:8px;padding:16px;margin:16px 0;background:#fafafa;">
+    <div style="font-size:14px;color:#666;">Request</div>
+    <div style="font-size:16px;font-weight:600;margin-top:4px;">${escapeHtml(request.title)}</div>
+  </div>
+  ${description}
+  <p style="margin:24px 0;">
+    <a href="${url}" style="display:inline-block;background:#f99300;color:#fff;text-decoration:none;padding:12px 24px;border-radius:6px;font-weight:600;">Upload files</a>
+  </p>
+  <p style="margin:16px 0;font-size:12px;color:#666;">
+    ${expiryText}<br>
+    No Zillit account is needed — just open the link and upload.
+  </p>
+  <hr style="border:none;border-top:1px solid #eee;margin:24px 0;">
+  <p style="font-size:11px;color:#999;margin:0;">
+    If you cannot click the button, paste this URL into your browser:<br>
+    <span style="word-break:break-all;">${url}</span>
+  </p>
+</body></html>`;
+};
+
+/**
+ * Send a single upload-invite email through the email service's
+ * /v2/imap-send endpoint — the same distribution pipeline driveShareLink
+ * uses. The email is dispatched from the sender's provisioned mailbox
+ * (user.mail_box_detail.email_address), not info@zillit.com, so it
+ * avoids same-domain anti-spoof rejection and lands in the sender's
+ * "Distributed Mails" folder for audit.
+ *
+ * Throws on any precondition miss / transport error so the caller can
+ * record a per-recipient failure.
+ */
+const sendRequestEmailViaDistribution = async ({
+  request, url, email, sender, moduledata,
+}) => {
+  if (!sender?.mail_box_detail?.email_address || !sender?.mail_box_detail?.id) {
+    throw new Error('sender_has_no_mailbox');
+  }
+  if (!moduledata) {
+    throw new Error('moduledata_required_for_imap_send');
+  }
+
+  const payload = {
+    from: `${sender.mail_box_detail.name || sender.full_name || ''} <${sender.mail_box_detail.email_address}>`.trim(),
+    to: [{ email_address: email }],
+    cc: [],
+    bcc: [],
+    subject: `${sender?.full_name || sender?.email || 'A Zillit user'} is requesting files from you`,
+    body: buildRequestEmailHtml({ request, url, sender }),
+    storage_folder: 'Distributed Mails',
+  };
+
+  const bodyhash = new EncryptDecryptUtil().hashWithSHA256(
+    JSON.stringify({ payload, moduledata }),
+  );
+
+  await axios.request({
+    method: 'post',
+    maxBodyLength: Infinity,
+    url: `${getUrls('CNC_BASE_URL')}/v2/imap-send`,
+    headers: { moduledata, bodyhash },
+    data: payload,
+  });
+};
+
+/**
+ * Top-level invite send for one recipient. Mirrors driveShareLink's
+ * sendShareEmail: logs the attempt, skips (does not throw) when the
+ * sender has no mailbox / no moduledata, and swallows transport errors
+ * so one bad recipient never fails request creation. Returns a result
+ * object the caller aggregates into the API response.
+ */
+const sendRequestEmail = async ({
+  request, url, email, sender, moduledata,
+}) => {
+  // eslint-disable-next-line no-console
+  console.info('[file_request_email_attempt]:', {
+    to: email,
+    sender_id: String(sender?._id || ''),
+    has_mailbox: !!(sender?.mail_box_detail?.id),
+    has_moduledata: !!moduledata,
+  });
+
+  if (!sender?.mail_box_detail?.id) {
+    // eslint-disable-next-line no-console
+    console.warn('[file_request_email_skipped_no_mailbox]:', { to: email });
+    return { email, sent: false, reason: 'sender_has_no_mailbox' };
+  }
+  if (!moduledata) {
+    // eslint-disable-next-line no-console
+    console.warn('[file_request_email_skipped_no_moduledata]:', { to: email });
+    return { email, sent: false, reason: 'moduledata_required' };
+  }
+
+  try {
+    await sendRequestEmailViaDistribution({
+      request, url, email, sender, moduledata,
+    });
+    // eslint-disable-next-line no-console
+    console.info('[file_request_email_sent]:', {
+      to: email, from: sender.mail_box_detail.email_address,
+    });
+    return { email, sent: true };
+  } catch (err) {
+    // emailapi /v2/imap-send sometimes returns 400 `email_sent_failed`
+    // AFTER MailSlurp has already queued the message, so a "failure"
+    // here is often not a true delivery failure. Log, don't retry.
+    // eslint-disable-next-line no-console
+    console.warn('[file_request_email_failed]:', {
+      to: email,
+      error: err?.response?.data?.message || err?.message || String(err),
+    });
+    return { email, sent: false, reason: err?.response?.data?.message || err?.message || 'send_failed' };
+  }
+};
+
 /* ───────────── Authenticated endpoints ───────────── */
 
-const createFileRequest = async ({ user, project, body }) => {
+const createFileRequest = async ({ user, project, body, moduledata }) => {
   const folder = await DriveFolderRepository.getFolder({
     filters: {
       _id: body.destination_folder_id,
@@ -186,10 +329,30 @@ const createFileRequest = async ({ user, project, body }) => {
     },
   });
 
+  const url = `${resolvePublicWebUrl()}/request/${request.token}`;
+
+  // Optional: email the link to recipients at creation time. The link
+  // is the same one the sender can copy manually — emailing is purely a
+  // convenience. De-dupe + drop blanks. Sends are best-effort: a failed
+  // send is reported in email_results but never fails request creation
+  // (the link already exists and can be shared manually).
+  const recipientEmails = Array.from(new Set(
+    (body.recipients || [])
+      .map((e) => String(e || '').toLowerCase().trim())
+      .filter(Boolean),
+  ));
+
+  let email_results = [];
+  if (recipientEmails.length > 0) {
+    email_results = await Promise.all(recipientEmails.map((email) => sendRequestEmail({
+      request, url, email, sender: user, moduledata,
+    })));
+  }
+
   return {
     _id: request._id,
     token: request.token,
-    url: `${resolvePublicWebUrl()}/request/${request.token}`,
+    url,
     title: request.title,
     destination_folder_id: request.destination_folder_id,
     expires_on: request.expires_on,
@@ -198,6 +361,7 @@ const createFileRequest = async ({ user, project, body }) => {
     allowed_mime_patterns: request.allowed_mime_patterns,
     require_uploader_email: request.require_uploader_email,
     require_uploader_name: request.require_uploader_name,
+    email_results,
   };
 };
 
