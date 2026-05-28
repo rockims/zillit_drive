@@ -34,10 +34,15 @@ import { getUrls } from './config.js';
 
 /* ───────────── S3 (shared with driveUpload.js) ───────────── */
 
-const S3_BUCKET = process.env.AWS_S3_BUCKET;
-const S3_DEFAULT_REGION = process.env.AWS_S3_BUCKET_REGION
-  || process.env.AWS_REGION
-  || 'us-east-1';
+// Resolve bucket + region EXACTLY like driveUpload.js. The dev/prod
+// env sets `S3_BUCKET` (not `AWS_S3_BUCKET`) and the bucket lives in
+// ap-south-1 (Mumbai). The previous values (`AWS_S3_BUCKET` only,
+// region default us-east-1) resolved the bucket to undefined / wrong
+// region, so the S3 PutObject failed once uploads finally reached it.
+const S3_DEFAULT_REGION = process.env.AWS_REGION || 'ap-south-1';
+const S3_BUCKET = process.env.S3_BUCKET
+  || process.env.AWS_S3_BUCKET
+  || 'zillit-bucket-mumbai-dev';
 
 const s3ClientCache = {};
 
