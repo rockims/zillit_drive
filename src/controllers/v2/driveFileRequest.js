@@ -6,10 +6,15 @@ const DriveFileRequestController = {
 
   async createFileRequest(req, res) {
     try {
+      // Forward moduledata so the service can re-authenticate against the
+      // email service when dispatching invite emails via /v2/imap-send
+      // (same pattern as driveShareLink + script_distribution).
+      const { moduledata } = req.headers || {};
       const data = await DriveFileRequestService.createFileRequest({
         user: req.user,
         project: req.project,
         body: req.body,
+        moduledata,
       });
       return ApiResponse.handleResponse(res, { message: 'file_request_created', data });
     } catch (error) {

@@ -1,5 +1,4 @@
 import express from 'express';
-import fileUpload from 'express-fileupload';
 
 import DriveFileRequestController from '../../controllers/v2/driveFileRequest.js';
 
@@ -16,20 +15,15 @@ router.get('/request/:token', DriveFileRequestController.getRequestViewerData);
 // and gets back a session_id to attribute subsequent uploads to.
 router.post('/request/:token/upload-session', DriveFileRequestController.startUploadSession);
 
-// Receive a single uploaded file. express-fileupload parses the
-// multipart body and exposes the file at req.files.file. 5 GB cap
-// matches max_total_size_bytes ceiling in the validator; per-request
-// gates (allowed mime, max files per session) are checked in the
-// service against the loaded request doc.
+// Receive a single uploaded file. The GLOBAL express-fileupload
+// middleware (app.js) already parses the multipart body and exposes
+// the file at req.files.file — applying a second fileUpload() here
+// would run busboy on an already-drained stream and throw
+// "Unexpected end of form". Per-request gates (allowed mime, size,
+// max files per session) are checked in the service against the
+// loaded request doc.
 router.post(
   '/request/:token/upload',
-  fileUpload({
-    limits: { fileSize: 5 * 1024 * 1024 * 1024 },
-    useTempFiles: false,                 // keep in memory; recipients send one file at a time
-    abortOnLimit: true,
-    safeFileNames: true,
-    preserveExtension: 16,               // keep up to 16-char extensions
-  }),
   DriveFileRequestController.receiveUpload,
 );
 
