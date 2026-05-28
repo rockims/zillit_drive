@@ -1611,6 +1611,70 @@ const moveFolder = async ({ user, project, device, params, body }) => {
     console.error('[moveFolder_notify_failed]:', err.message);
   }
 
+  // ZL-18871/-18872: re-anchor the level chain of every unread notification
+  // in the MOVED SUBTREE — descendant folders + the files inside them — not
+  // just the moved folder itself (handled above). After a move, every
+  // descendant's root ancestor changes, so their badges' level_1..level_3
+  // still point at the OLD ancestry and the FE BadgeDB rolls them up to the
+  // pre-move location (e.g. a file inside the moved folder keeps rolling up
+  // to the folder's old root instead of the new parent).
+  //
+  // The level chain (level_1..levels) is identical for a folder and every
+  // file directly inside it (it's the folder's ancestry; only reference_id
+  // differs), so we compute it ONCE per subtree folder and apply the level
+  // fields to that folder's own badge + all its file badges. reference_id is
+  // left unchanged and the badges stay unread, so they re-roll under the new
+  // ancestor. Silent in-place update — no fresh FCM (the folder-move FCM is
+  // already emitted above); receivers see the corrected rollup on their next
+  // "Shared with Me" refresh / notification re-fetch.
+  try {
+    const subtreeFolderIds = await DriveAccessService.collectDescendantFolderIds({
+      projectId: project._id,
+      rootFolderId: updatedFolder._id,
+      includeRoot: true,
+    });
+    const subtreeFiles = await DriveFileRepository.getFiles({
+      filters: {
+        project_id: project._id,
+        folder_id: { $in: subtreeFolderIds },
+        deleted_on: 0,
+      },
+    });
+
+    await Promise.all(subtreeFolderIds.map(async (sId) => {
+      const chain = await DriveNotificationReceivers.buildNotificationLevels({
+        project, folderId: sId, itemId: sId,
+      });
+      const fileIdsInFolder = subtreeFiles
+        .filter((f) => idsEqual(f.folder_id, sId))
+        .map((f) => toIdString(f._id));
+      // The moved folder's OWN badge is already handled by the block above
+      // (mark-read + re-emit), so skip it here; still re-anchor its files.
+      const refIds = [
+        ...(idsEqual(sId, updatedFolder._id) ? [] : [toIdString(sId)]),
+        ...fileIdsInFolder,
+      ].filter(Boolean);
+      if (refIds.length === 0) return;
+      await NotificationRepository.updateNotification({
+        filters: {
+          project_id: project._id,
+          reference_id: { $in: refIds },
+          message_read: false,
+        },
+        data: {
+          level_1: chain.level_1,
+          level_2: chain.level_2,
+          level_3: chain.level_3,
+          levels: chain.levels,
+          updated: Date.now(),
+        },
+      });
+    }));
+  } catch (err) {
+    // Non-fatal — the move + folder-level notification already succeeded.
+    console.error('[moveFolder_subtree_reanchor_failed]:', err.message);
+  }
+
   // 10. Socket emit for real-time updates
   socketClient('__admin_events__', {
     event: 'drive:folder:moved',
