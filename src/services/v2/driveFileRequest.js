@@ -266,15 +266,28 @@ const sendRequestEmail = async ({
     });
     return { email, sent: true };
   } catch (err) {
-    // emailapi /v2/imap-send sometimes returns 400 `email_sent_failed`
-    // AFTER MailSlurp has already queued the message, so a "failure"
-    // here is often not a true delivery failure. Log, don't retry.
+    const apiError = err?.response?.data?.message || err?.message || String(err);
+
+    // emailapi /v2/imap-send returns 400 `email_sent_failed` AFTER
+    // MailSlurp has already queued/delivered the message — it is a
+    // confirmed false-negative in this codebase: during the share-link
+    // work the SES fallback fired on this exact error and delivered a
+    // SECOND copy (why PR #83 removed that fallback). Verified again
+    // here — the recipient received the mail despite this response.
+    // So treat ONLY this specific message as a successful send; every
+    // other error remains a genuine failure.
+    if (apiError === 'email_sent_failed') {
+      // eslint-disable-next-line no-console
+      console.info('[file_request_email_sent_queued]:', {
+        to: email,
+        note: 'emailapi returned email_sent_failed but the message is delivered',
+      });
+      return { email, sent: true };
+    }
+
     // eslint-disable-next-line no-console
-    console.warn('[file_request_email_failed]:', {
-      to: email,
-      error: err?.response?.data?.message || err?.message || String(err),
-    });
-    return { email, sent: false, reason: err?.response?.data?.message || err?.message || 'send_failed' };
+    console.warn('[file_request_email_failed]:', { to: email, error: apiError });
+    return { email, sent: false, reason: apiError };
   }
 };
 
