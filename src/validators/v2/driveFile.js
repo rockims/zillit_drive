@@ -83,6 +83,22 @@ const createFile = Joi.object({
     err[0].message = 'attachment_validation';
     return err;
   }),
+
+  // ZL-18894: shared-access grants supplied at upload time. Mirrors the
+  // share endpoint's `entries` item shape (driveFileAccess validator). The
+  // service hands this array to seedFileAccess so the listed users receive
+  // access as soon as the upload completes.
+  file_access: Joi.array().items(
+    Joi.object({
+      user_id: Joi.objectId().required(),
+      can_view: Joi.boolean().default(true),
+      can_edit: Joi.boolean().default(false),
+      can_download: Joi.boolean().default(true),
+    }),
+  ).optional().error((err) => {
+    err[0].message = 'file_access_validation';
+    return err;
+  }),
 });
 
 const updateFile = Joi.object({
