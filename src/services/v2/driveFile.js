@@ -305,13 +305,20 @@ const createFile = async ({ user, project, device, body }) => {
 
   const file = await DriveFileRepository.createFile({ data });
 
-  // Seed file-level access permissions
+  // Seed file-level access permissions.
+  // ZL-18894: pass the `file_access` array from the upload payload so the
+  // users the uploader shared with during upload actually receive access.
+  // Previously hardcoded `entries: []`, so only the uploader's owner record
+  // was created and shared users got nothing (the seedFileAccess loop that
+  // upserts per-entry access never ran). Android/web send
+  // `file_access: [{ user_id, can_view, can_edit, can_download }]` — the
+  // same shape the share endpoint's `entries` accepts.
   try {
     await DriveFileAccessService.seedFileAccess({
       project,
       user,
       file,
-      entries: [],
+      entries: Array.isArray(body.file_access) ? body.file_access : [],
     });
   } catch (err) {
     console.error('[file_access_seed_failed]:', err.message);

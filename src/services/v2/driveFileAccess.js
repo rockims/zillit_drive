@@ -166,7 +166,11 @@ const seedFileAccess = async ({ project, user, file, entries = [] }) => {
   if (entries.length > 0) {
     await Promise.all(
       entries
-        .filter((entry) => toIdString(entry.user_id) !== toIdString(user._id))
+        // ZL-18894: skip malformed entries (no user_id) and the uploader's
+        // own id so a bad share-list entry never creates a garbage access
+        // record or duplicates the owner row.
+        .filter((entry) => entry && entry.user_id
+          && toIdString(entry.user_id) !== toIdString(user._id))
         .map((entry) => {
           const perms = normalizePermissions(entry);
           return DriveFileAccessRepository.upsertAccess({
