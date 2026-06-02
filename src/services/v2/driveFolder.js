@@ -534,6 +534,38 @@ const getFolders = async ({ user, project, query }) => {
     }),
   );
 
+  // Shared-with-me sort: order by when each folder was shared with
+  // the current user (DriveFolderAccess.created_on for the (folder_id,
+  // user_id=me, deleted_on:0) row). The DB-level buildFolderSort
+  // default still ran above — we re-sort the resolved page here so
+  // the latest-shared items surface first. A folder with no access
+  // row (project-visible but not directly shared) gets shared_at=0
+  // and falls to the end. Also exposes `_sharedAt` on the response.
+  if (listingQuery.quickFilter === 'shared' && foldersWithPermissions.length > 0) {
+    const folderIds = foldersWithPermissions.map((f) => f._id);
+    const myAccesses = await DriveFolderAccessRepository.getAccesses({
+      filters: {
+        project_id: project._id,
+        user_id: user._id,
+        folder_id: { $in: folderIds },
+        deleted_on: 0,
+      },
+    });
+    const sharedAtByFolderId = new Map();
+    for (const a of myAccesses) {
+      const fid = String(a.folder_id?._id || a.folder_id);
+      const t = a.created_on || 0;
+      // Re-share after soft-delete creates a new row — keep the latest.
+      if (!sharedAtByFolderId.has(fid) || sharedAtByFolderId.get(fid) < t) {
+        sharedAtByFolderId.set(fid, t);
+      }
+    }
+    for (const f of foldersWithPermissions) {
+      f._sharedAt = sharedAtByFolderId.get(String(f._id)) || 0;
+    }
+    foldersWithPermissions.sort((a, b) => (b._sharedAt || 0) - (a._sharedAt || 0));
+  }
+
   if (!shouldReturnMeta) {
     return foldersWithPermissions;
   }
