@@ -6,7 +6,7 @@ const getFile = ({ filters }) => DriveFile.findOne(filters);
 
 const getFiles = ({
   filters,
-  sort = { created_on: -1 },
+  sort = { updated_on: -1, created_on: -1, _id: 1 },
   limit = null,
   skip = null,
   select = null,
@@ -39,7 +39,7 @@ const countFiles = ({ filters }) => DriveFile.countDocuments(filters);
 
 const deleteFile = ({ filters, data }) => DriveFile.updateOne({ ...filters }, { $set: { ...data } });
 
-const getFilesByFolder = ({ filters, sort = { created_on: -1 } }) => DriveFile.find(filters).sort(sort);
+const getFilesByFolder = ({ filters, sort = { updated_on: -1, created_on: -1, _id: 1 } }) => DriveFile.find(filters).sort(sort);
 
 export default {
   createFile,
