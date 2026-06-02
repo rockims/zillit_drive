@@ -1339,7 +1339,6 @@ const getFolderContents = async ({ user, project, params }) => {
 
   const subfolders = await DriveFolderRepository.getFolders({
     filters: subfolderFilters,
-    sort: { created_on: -1 },
   });
 
   const files = await DriveFileRepository.getFiles({
@@ -1348,7 +1347,6 @@ const getFolderContents = async ({ user, project, params }) => {
       project_id: project._id,
       deleted_on: 0,
     },
-    sort: { created_on: -1 },
   });
 
   return {
