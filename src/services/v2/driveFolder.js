@@ -534,28 +534,51 @@ const getFolders = async ({ user, project, query }) => {
     }),
   );
 
-  // Shared-with-me sort: order by when each folder was shared with
-  // the current user (DriveFolderAccess.created_on for the (folder_id,
-  // user_id=me, deleted_on:0) row). The DB-level buildFolderSort
-  // default still ran above — we re-sort the resolved page here so
-  // the latest-shared items surface first. A folder with no access
-  // row (project-visible but not directly shared) gets shared_at=0
-  // and falls to the end. Also exposes `_sharedAt` on the response.
-  if (listingQuery.quickFilter === 'shared' && foldersWithPermissions.length > 0) {
+  // Shared-tab sort: order by access timestamp instead of the DB-level
+  // updated_on default. Two flavors:
+  //   - `shared`        (Shared with me): use DriveFolderAccess.created_on
+  //                     where user_id=me — when the folder was shared TO me.
+  //   - `shared_by_me`: use DriveFolderAccess.created_on where
+  //                     created_by=me and user_id≠me — when I last shared
+  //                     the folder with anyone (re-shares bump to top).
+  //                     NOTE: folder access uses `created_by` to record the
+  //                     granter (file access uses `granted_by`); we mirror
+  //                     the same predicate as the visibility filter above.
+  // A folder with no matching access row (project-visible via role rights,
+  // not directly shared) gets shared_at=0 and falls to the end. We expose
+  // `_sharedAt` on the response for the FE to render "Shared on …".
+  //
+  // NOTE on pagination: the DB query above was already sliced by
+  // limit/offset using buildFolderSort. Re-sorting only this page is fine
+  // while the FE fetches the whole list in one shot. If pagination is
+  // later enabled for these tabs, the join needs to move into the DB
+  // query (aggregation $lookup).
+  if (
+    (listingQuery.quickFilter === 'shared' || listingQuery.quickFilter === 'shared_by_me')
+    && foldersWithPermissions.length > 0
+  ) {
     const folderIds = foldersWithPermissions.map((f) => f._id);
+    const accessFilter = {
+      project_id: project._id,
+      folder_id: { $in: folderIds },
+      deleted_on: 0,
+    };
+    if (listingQuery.quickFilter === 'shared') {
+      accessFilter.user_id = user._id;
+    } else {
+      // shared_by_me — rows where I granted access to someone else.
+      accessFilter.created_by = user._id;
+      accessFilter.user_id = { $ne: user._id };
+    }
     const myAccesses = await DriveFolderAccessRepository.getAccesses({
-      filters: {
-        project_id: project._id,
-        user_id: user._id,
-        folder_id: { $in: folderIds },
-        deleted_on: 0,
-      },
+      filters: accessFilter,
     });
     const sharedAtByFolderId = new Map();
     for (const a of myAccesses) {
       const fid = String(a.folder_id?._id || a.folder_id);
       const t = a.created_on || 0;
-      // Re-share after soft-delete creates a new row — keep the latest.
+      // Multiple rows possible: re-share after delete OR one row per
+      // recipient in shared_by_me — keep the max either way.
       if (!sharedAtByFolderId.has(fid) || sharedAtByFolderId.get(fid) < t) {
         sharedAtByFolderId.set(fid, t);
       }
@@ -902,6 +925,10 @@ const getDriveContents = async ({ user, project, query }) => {
     const folderTotal = aggResult?.folderCount?.[0]?.count || 0;
     const fileTotal = aggResult?.fileCount?.[0]?.count || 0;
 
+    await _enrichContentsWithSharedAt({
+      items, user, project, quickFilter: listingQuery.quickFilter,
+    });
+
     return {
       items,
       pagination: {
@@ -934,6 +961,10 @@ const getDriveContents = async ({ user, project, query }) => {
   const folderTotal = aggResult?.folderCount?.[0]?.count || 0;
   const fileTotal = aggResult?.fileCount?.[0]?.count || 0;
 
+  await _enrichContentsWithSharedAt({
+    items, user, project, quickFilter: listingQuery.quickFilter,
+  });
+
   return {
     items,
     pagination: {
@@ -945,6 +976,85 @@ const getDriveContents = async ({ user, project, query }) => {
     counts: { folders: folderTotal, files: fileTotal, total },
     grouping: buildContentGrouping({ items, groupBy: listingQuery.groupBy }),
   };
+};
+
+// Mirror of the per-endpoint shared-tab post-sort for the unified
+// /folders/contents aggregation pipeline. The aggregation returns a mixed
+// array of files + folders, so we batch-lookup BOTH access collections in
+// parallel, build a single id→shared_at map, annotate each item with
+// `_sharedAt`, and re-sort. No-op for any other quick_filter — items are
+// returned in the DB-side _sort_date order (updated_on desc).
+//
+// Pagination caveat applies here too: the aggregation pre-sliced by
+// _sort_date, so re-sorting only the current page is correct ONLY when
+// the FE asks for the whole list in one shot. A future migration of this
+// join into a $lookup stage would fix that.
+const _enrichContentsWithSharedAt = async ({
+  items, user, project, quickFilter,
+}) => {
+  if (
+    (quickFilter !== 'shared' && quickFilter !== 'shared_by_me')
+    || !items
+    || items.length === 0
+  ) {
+    return;
+  }
+
+  const fileIds = [];
+  const folderIds = [];
+  for (const it of items) {
+    if (it?.is_folder) folderIds.push(it._id);
+    else fileIds.push(it._id);
+  }
+
+  const folderAccessFilter = folderIds.length > 0 ? {
+    project_id: project._id,
+    folder_id: { $in: folderIds },
+    deleted_on: 0,
+    ...(quickFilter === 'shared'
+      ? { user_id: user._id }
+      : { created_by: user._id, user_id: { $ne: user._id } }),
+  } : null;
+
+  const fileAccessFilter = fileIds.length > 0 ? {
+    project_id: project._id,
+    file_id: { $in: fileIds },
+    deleted_on: 0,
+    ...(quickFilter === 'shared'
+      ? { user_id: user._id }
+      : { granted_by: user._id, user_id: { $ne: user._id } }),
+  } : null;
+
+  const [folderAccesses, fileAccesses] = await Promise.all([
+    folderAccessFilter
+      ? DriveFolderAccessRepository.getAccesses({ filters: folderAccessFilter })
+      : Promise.resolve([]),
+    fileAccessFilter
+      ? DriveFileAccessRepository.getAccesses({ filters: fileAccessFilter })
+      : Promise.resolve([]),
+  ]);
+
+  // Single id→shared_at map keyed by string id. Files and folders cannot
+  // share ObjectId values across collections in practice, so a flat map
+  // is safe.
+  const sharedAtById = new Map();
+  const upsertMax = (id, t) => {
+    const key = String(id);
+    if (!sharedAtById.has(key) || sharedAtById.get(key) < t) {
+      sharedAtById.set(key, t);
+    }
+  };
+  for (const a of folderAccesses) {
+    upsertMax(a.folder_id?._id || a.folder_id, a.created_on || 0);
+  }
+  for (const a of fileAccesses) {
+    upsertMax(a.file_id?._id || a.file_id, a.created_on || 0);
+  }
+
+  for (const it of items) {
+    it._sharedAt = sharedAtById.get(String(it._id)) || 0;
+  }
+  items.sort((a, b) => (b._sharedAt || 0) - (a._sharedAt || 0));
 };
 
 const getFolder = async ({ user, project, params }) => {
