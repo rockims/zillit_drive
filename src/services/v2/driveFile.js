@@ -581,6 +581,40 @@ const getFiles = async ({ user, project, query }) => {
     }),
   );
 
+  // Shared-with-me sort: order by when each file was shared with the
+  // current user (DriveFileAccess.created_on for the (file_id,
+  // user_id=me, deleted_on:0) row). The DB-level buildFileSort default
+  // (updated_on desc) is still applied above — we re-sort the resolved
+  // page here so the latest-shared items surface first. A file with no
+  // access row (project-visible but not directly shared) gets
+  // shared_at=0 and falls to the end. Also exposes `_sharedAt` on the
+  // response so the FE can render "Shared on …" if needed.
+  if (listingQuery.quickFilter === 'shared' && filesWithPermissions.length > 0) {
+    const fileIds = filesWithPermissions.map((f) => f._id);
+    const myAccesses = await DriveFileAccessRepository.getAccesses({
+      filters: {
+        project_id: project._id,
+        user_id: user._id,
+        file_id: { $in: fileIds },
+        deleted_on: 0,
+      },
+    });
+    const sharedAtByFileId = new Map();
+    for (const a of myAccesses) {
+      const fid = String(a.file_id?._id || a.file_id);
+      const t = a.created_on || 0;
+      // If multiple rows for the same file exist (re-share after
+      // soft-delete), keep the latest.
+      if (!sharedAtByFileId.has(fid) || sharedAtByFileId.get(fid) < t) {
+        sharedAtByFileId.set(fid, t);
+      }
+    }
+    for (const f of filesWithPermissions) {
+      f._sharedAt = sharedAtByFileId.get(String(f._id)) || 0;
+    }
+    filesWithPermissions.sort((a, b) => (b._sharedAt || 0) - (a._sharedAt || 0));
+  }
+
   if (!shouldReturnMeta) {
     return filesWithPermissions;
   }
