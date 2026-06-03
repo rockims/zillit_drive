@@ -21,6 +21,7 @@ const {
 // Drive-specific constants — not yet in zillit-libs NotificationConstants
 const DRIVE_TOOL = 'drive_label';
 const DRIVE_UNIT_FOLDER = 'drive_folder_label';
+const DRIVE_UNIT_FILE = 'drive_file_label';
 
 const toIdString = (value) => (value ? value.toString() : null);
 const idsEqual = (valueA, valueB) => toIdString(valueA) === toIdString(valueB);
@@ -1751,37 +1752,37 @@ const moveFolder = async ({ user, project, device, params, body }) => {
     console.error('[moveFolder_notify_failed]:', err.message);
   }
 
-  // ZL-18871/-18872: re-anchor the level chain of every unread notification
-  // in the MOVED SUBTREE — descendant folders + the files inside them — not
-  // just the moved folder itself (handled above). After a move, every
-  // descendant's root ancestor changes, so their badges' level_1..level_3
-  // still point at the OLD ancestry and the FE BadgeDB rolls them up to the
-  // pre-move location (e.g. a file inside the moved folder keeps rolling up
-  // to the folder's old root instead of the new parent).
+  // ZL-18871/-18872: re-anchor every unread badge in the MOVED SUBTREE
+  // — descendant folders + the files inside them — so they roll up under
+  // the new ancestor.
   //
-  // The level chain (level_1..levels) is identical for a folder and every
-  // file directly inside it (it's the folder's ancestry; only reference_id
-  // differs), so we compute it ONCE per subtree folder and apply the level
-  // fields to that folder's own badge + all its file badges. reference_id is
-  // left unchanged and the badges stay unread, so they re-roll under the new
-  // ancestor.
+  // Why a three-phase flow (mark-read → silent-drop → fresh-save) instead
+  // of an in-place level_* rewrite:
+  //   Clients that work purely off socket events (iOS in particular) maintain
+  //   their badge list from notification:save (add) and notification:silent
+  //   (drop) events alone — they do NOT issue a /notifications GET after a
+  //   silent event. So an in-place DB rewrite of level_1..3 is invisible to
+  //   iOS: the badge keeps its pre-move levels in the local store and rolls
+  //   up under the OLD ancestor forever, until the app cold-starts.
   //
-  // ZL-18871 follow-up (web BadgeDB cache): rewriting `level_*` in DB alone
-  // is invisible to the FE — its local BadgeDB still has the pre-move levels
-  // until a hard refresh. So in addition to the DB rewrite below, we capture
-  // every prior unread notification_uuid in the subtree (per receiver) and
-  // emit ONE `notification:silent` per receiver with
-  // `reference_data.read_notification_ids = [uuids…]`. The FE's
-  // notification:silent handler (AllBadges.jsx) calls
-  // `badgeDB.removeBadgesFromDB(uuids)` → entries disappear from the cache;
-  // on the next drive sidebar / notification refresh the FE re-fetches them
-  // from /notifications with the freshly-written `level_*` and they re-roll
-  // under the new ancestor. We do NOT mark them read here (they're still
-  // unread from the user's POV) and we do NOT emit a fresh per-item
-  // `notification:save` (would generate dozens of redundant FCM pushes for
-  // every descendant — the user already got a single "Folder moved" FCM
-  // above; the subtree refresh is a cache-correctness operation, not a
-  // visible notification).
+  // Three-phase flow mirrors what the moved-folder OWN block does at
+  // 1691-1747 — the canonical share/move pattern in this codebase:
+  //   1) MARK READ in DB the original unread subtree notifications, so they
+  //      no longer count toward badges anywhere (cold-fetch or otherwise).
+  //   2) SILENT DROP per receiver — emit notification:silent carrying
+  //      read_notification_ids = [original uuids]; each client evicts those
+  //      uuids from its local badge cache.
+  //   3) FRESH SAVE per (item, receiver) — emit notification:save with
+  //      action drive_folder_subtree_reanchored and a NEW level chain
+  //      computed from the moved folder's new path. notify:false suppresses
+  //      FCM push so the user's device doesn't get one phone push per
+  //      descendant (the user already got a single Folder moved push from
+  //      the block above); save:true persists the new notification in DB
+  //      so cold-fetch is also correct.
+  //
+  // Cost: O(items × receivers) save events, but all marked silent at the
+  // FCM layer (notify:false). For a deep subtree this is a burst of socket
+  // messages — acceptable, since it only fires once per folder move.
   try {
     const subtreeFolderIds = await DriveAccessService.collectDescendantFolderIds({
       projectId: project._id,
@@ -1796,9 +1797,9 @@ const moveFolder = async ({ user, project, device, params, body }) => {
       },
     });
 
-    // Aggregate every reference_id whose level chain we're about to rewrite.
-    // Excludes the moved folder's OWN id — its badge is handled by the
-    // silent-drop + fresh save block above (1691-1747).
+    // Aggregate every reference_id we want to re-anchor. Excludes the moved
+    // folder's OWN id — its badge is handled by the silent-drop + fresh save
+    // block above (1691-1747).
     const allSubtreeRefIds = [
       ...subtreeFolderIds
         .filter((sId) => !idsEqual(sId, updatedFolder._id))
@@ -1806,73 +1807,60 @@ const moveFolder = async ({ user, project, device, params, body }) => {
       ...subtreeFiles.map((f) => toIdString(f._id)),
     ].filter(Boolean);
 
-    // Capture prior unread uuids BEFORE the level rewrite. The rewrite only
-    // touches level_* / levels / updated — uuids and message_read are
-    // unchanged — so we could also capture after, but capturing here keeps
-    // the silent-drop fanout decoupled from the per-folder update loop.
-    let priorSubtreeNotifications = [];
-    if (allSubtreeRefIds.length > 0) {
-      priorSubtreeNotifications = await NotificationRepository.getNotifications({
+    // Capture prior unread notifications BEFORE we mark them read. We need
+    // their notification_uuid (for silent-drop), receiver (for fan-out), and
+    // unit (to emit the matching fresh save with the right resource kind).
+    const priorSubtreeNotifications = allSubtreeRefIds.length > 0
+      ? await NotificationRepository.getNotifications({
         filters: {
           project_id: project._id,
           reference_id: { $in: allSubtreeRefIds },
           message_read: false,
         },
-      });
-    }
+      })
+      : [];
 
-    await Promise.all(subtreeFolderIds.map(async (sId) => {
-      const chain = await DriveNotificationReceivers.buildNotificationLevels({
-        project, folderId: sId, itemId: sId,
-      });
-      const fileIdsInFolder = subtreeFiles
-        .filter((f) => idsEqual(f.folder_id, sId))
-        .map((f) => toIdString(f._id));
-      // The moved folder's OWN badge is already handled by the block above
-      // (mark-read + re-emit), so skip it here; still re-anchor its files.
-      const refIds = [
-        ...(idsEqual(sId, updatedFolder._id) ? [] : [toIdString(sId)]),
-        ...fileIdsInFolder,
-      ].filter(Boolean);
-      if (refIds.length === 0) return;
+    if (priorSubtreeNotifications.length > 0) {
+      // Phase 1 — mark originals as read so they no longer drive badges.
+      // The fresh-save phase creates replacement notifications with the
+      // correct level chain; without the mark-read, cold-fetch clients
+      // would see duplicate badges.
       await NotificationRepository.updateNotification({
         filters: {
           project_id: project._id,
-          reference_id: { $in: refIds },
+          reference_id: { $in: allSubtreeRefIds },
           message_read: false,
         },
-        data: {
-          level_1: chain.level_1,
-          level_2: chain.level_2,
-          level_3: chain.level_3,
-          levels: chain.levels,
-          updated: Date.now(),
-        },
+        data: { message_read: true, updated: Date.now() },
       });
-    }));
 
-    // Fan out one silent drop per receiver so the FE BadgeDB cache evicts
-    // the stale entries. action: 'drive_folder_subtree_reanchored' is
-    // backend-internal — the FE handler keys off `notification:silent` +
-    // `read_notification_ids`, not the action name. parentFolderOwnerId is
-    // null because the tab discriminator doesn't matter for a pure drop
-    // (the FE removes by primary key, not by tab). Wrapped in try/catch
-    // below so a partial fan-out failure can't break the move flow.
-    if (priorSubtreeNotifications.length > 0) {
-      const byReceiver = new Map();
+      // Phase 2 — silent drop per receiver so each client evicts the
+      // pre-move uuids from its local badge cache. action label is
+      // backend-internal — FE silent handler keys off
+      // notification:silent + read_notification_ids, not the action name.
+      // The target parent's owner is the tab-routing anchor for the whole
+      // moved subtree (matches the moved-folder OWN block above).
+      const targetParent = updatedFolder.parent_folder_id
+        ? await _getFolderById({ project, folderId: updatedFolder.parent_folder_id })
+        : null;
+      const subtreeOwnerId = targetParent
+        ? targetParent.created_by
+        : updatedFolder.created_by;
+
+      const dropByReceiver = new Map();
       priorSubtreeNotifications.forEach((n) => {
         const rid = toIdString(n.receiver);
-        if (!byReceiver.has(rid)) byReceiver.set(rid, []);
-        byReceiver.get(rid).push(n.notification_uuid);
+        if (!dropByReceiver.has(rid)) dropByReceiver.set(rid, []);
+        dropByReceiver.get(rid).push(n.notification_uuid);
       });
 
       await Promise.all(
-        Array.from(byReceiver.entries()).map(([receiverId, uuids]) =>
+        Array.from(dropByReceiver.entries()).map(([receiverId, uuids]) =>
           DriveNotificationReceivers.notifyAllTabRouted({
             project,
             actor: user,
             receiverIds: [receiverId],
-            parentFolderOwnerId: null,
+            parentFolderOwnerId: subtreeOwnerId,
             folderId: updatedFolder.parent_folder_id || updatedFolder._id,
             itemId: updatedFolder._id,
             unit: DRIVE_UNIT_FOLDER,
@@ -1891,6 +1879,103 @@ const moveFolder = async ({ user, project, device, params, body }) => {
           })
         )
       );
+
+      // Phase 3 — fan out fresh notification:save per (item, receiver) with
+      // the new level chain. Each save is FCM-suppressed (notify:false) so
+      // there's no phone push per item — the user already got a single
+      // Folder moved push from the block above. save:true persists each new
+      // notification in DB so the badge survives a cold fetch.
+      //
+      // We compute the chain ONCE per subtree folder (it's the folder's
+      // ancestry; same for a folder and every file directly inside it,
+      // only itemId / reference_id differs).
+      const priorByRefId = new Map();
+      priorSubtreeNotifications.forEach((n) => {
+        const ref = toIdString(n.reference_id);
+        if (!priorByRefId.has(ref)) priorByRefId.set(ref, []);
+        priorByRefId.get(ref).push(n);
+      });
+
+      await Promise.all(subtreeFolderIds.map(async (sId) => {
+        const folderSelfPriors = priorByRefId.get(toIdString(sId)) || [];
+        const filesInThisFolder = subtreeFiles.filter((f) => idsEqual(f.folder_id, sId));
+
+        const emits = [];
+
+        // Folder sId itself — skip the moved root (handled by the
+        // moved-folder OWN block above).
+        if (!idsEqual(sId, updatedFolder._id) && folderSelfPriors.length > 0) {
+          const folderReceivers = Array.from(new Set(
+            folderSelfPriors.map((n) => toIdString(n.receiver))
+          )).filter(Boolean);
+
+          if (folderReceivers.length > 0) {
+            emits.push(DriveNotificationReceivers.notifyAllTabRouted({
+              project,
+              actor: user,
+              receiverIds: folderReceivers,
+              parentFolderOwnerId: subtreeOwnerId,
+              folderId: sId,
+              itemId: sId,
+              unit: DRIVE_UNIT_FOLDER,
+              action: 'drive_folder_subtree_reanchored',
+              referenceData: {
+                folder_id: toIdString(updatedFolder._id),
+                folder_name: updatedFolder.folder_name,
+                source_parent_id: folder.parent_folder_id
+                  ? toIdString(folder.parent_folder_id)
+                  : null,
+                target_parent_id: target_folder_id || null,
+                descendant_folder_id: toIdString(sId),
+              },
+              socketClient,
+              // notify:false → no FCM push (already sent for the move root).
+              // save:true → persist new notification in DB + emit
+              //             notification:save so clients add the badge.
+              options: { notify: false, save: true },
+            }));
+          }
+        }
+
+        // Each file directly inside sId.
+        for (const file of filesInThisFolder) {
+          const filePriors = priorByRefId.get(toIdString(file._id)) || [];
+          if (filePriors.length === 0) continue;
+
+          const fileReceivers = Array.from(new Set(
+            filePriors.map((n) => toIdString(n.receiver))
+          )).filter(Boolean);
+
+          if (fileReceivers.length > 0) {
+            emits.push(DriveNotificationReceivers.notifyAllTabRouted({
+              project,
+              actor: user,
+              receiverIds: fileReceivers,
+              parentFolderOwnerId: subtreeOwnerId,
+              // folderId is the file's parent; drives the level chain.
+              folderId: sId,
+              itemId: file._id,
+              unit: DRIVE_UNIT_FILE,
+              action: 'drive_folder_subtree_reanchored',
+              referenceData: {
+                folder_id: toIdString(updatedFolder._id),
+                folder_name: updatedFolder.folder_name,
+                source_parent_id: folder.parent_folder_id
+                  ? toIdString(folder.parent_folder_id)
+                  : null,
+                target_parent_id: target_folder_id || null,
+                file_id: toIdString(file._id),
+                file_name: file.file_name,
+                parent_folder_id: toIdString(sId),
+              },
+              socketClient,
+              options: { notify: false, save: true },
+            }));
+          }
+        }
+
+        if (emits.length > 0) await Promise.all(emits);
+      }));
     }
   } catch (err) {
     // Non-fatal — the move + folder-level notification already succeeded.
