@@ -6,7 +6,7 @@ const getFolder = ({ filters }) => DriveFolder.findOne(filters);
 
 const getFolders = ({
   filters,
-  sort = { created_on: -1 },
+  sort = { updated_on: -1, created_on: -1, _id: 1 },
   limit = null,
   skip = null,
 }) => {

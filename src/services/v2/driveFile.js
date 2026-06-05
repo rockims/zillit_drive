@@ -581,6 +581,64 @@ const getFiles = async ({ user, project, query }) => {
     }),
   );
 
+  // Shared-tab sort: order by access timestamp instead of the DB-level
+  // updated_on default. Two flavors:
+  //   - `shared`        (Shared with me): use DriveFileAccess.created_on
+  //                     where user_id=me — when the file was shared TO me.
+  //   - `shared_by_me`: use DriveFileAccess.created_on where granted_by=me
+  //                     and user_id≠me — when I last shared the file with
+  //                     anyone (re-shares bump it to the top).
+  // A file with no matching access row (project-visible via role rights,
+  // not directly shared) gets shared_at=0 and falls to the end. We expose
+  // `_sharedAt` on the response so the FE can render a "Shared on …" label.
+  //
+  // NOTE on pagination: the DB query above was already sliced by
+  // limit/offset using buildFileSort. Re-sorting only this page is fine
+  // while the FE fetches the whole list in one shot (current behavior).
+  // If pagination is later enabled for these tabs, this join needs to
+  // move into the DB query (aggregation $lookup) so skip/limit operate
+  // on the shared_at order.
+  if (
+    (listingQuery.quickFilter === 'shared' || listingQuery.quickFilter === 'shared_by_me')
+    && filesWithPermissions.length > 0
+  ) {
+    const fileIds = filesWithPermissions.map((f) => f._id);
+    const accessFilter = {
+      project_id: project._id,
+      file_id: { $in: fileIds },
+      deleted_on: 0,
+    };
+    if (listingQuery.quickFilter === 'shared') {
+      accessFilter.user_id = user._id;
+    } else {
+      // shared_by_me — rows where I granted access to someone else.
+      // Matches the same predicate used for the visibility filter
+      // (granted_by=me, user_id≠me) higher up in this function.
+      accessFilter.granted_by = user._id;
+      accessFilter.user_id = { $ne: user._id };
+    }
+    const myAccesses = await DriveFileAccessRepository.getAccesses({
+      filters: accessFilter,
+    });
+    const sharedAtByFileId = new Map();
+    for (const a of myAccesses) {
+      const fid = String(a.file_id?._id || a.file_id);
+      const t = a.created_on || 0;
+      // Multiple rows can exist for the same file:
+      //   - `shared`        — re-share after soft-delete creates a new row
+      //   - `shared_by_me`  — one row per recipient; we want the latest
+      //                       re-share to anyone
+      // Keep the max in either case.
+      if (!sharedAtByFileId.has(fid) || sharedAtByFileId.get(fid) < t) {
+        sharedAtByFileId.set(fid, t);
+      }
+    }
+    for (const f of filesWithPermissions) {
+      f._sharedAt = sharedAtByFileId.get(String(f._id)) || 0;
+    }
+    filesWithPermissions.sort((a, b) => (b._sharedAt || 0) - (a._sharedAt || 0));
+  }
+
   if (!shouldReturnMeta) {
     return filesWithPermissions;
   }

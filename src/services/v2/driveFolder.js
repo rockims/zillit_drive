@@ -21,6 +21,7 @@ const {
 // Drive-specific constants — not yet in zillit-libs NotificationConstants
 const DRIVE_TOOL = 'drive_label';
 const DRIVE_UNIT_FOLDER = 'drive_folder_label';
+const DRIVE_UNIT_FILE = 'drive_file_label';
 
 const toIdString = (value) => (value ? value.toString() : null);
 const idsEqual = (valueA, valueB) => toIdString(valueA) === toIdString(valueB);
@@ -534,6 +535,61 @@ const getFolders = async ({ user, project, query }) => {
     }),
   );
 
+  // Shared-tab sort: order by access timestamp instead of the DB-level
+  // updated_on default. Two flavors:
+  //   - `shared`        (Shared with me): use DriveFolderAccess.created_on
+  //                     where user_id=me — when the folder was shared TO me.
+  //   - `shared_by_me`: use DriveFolderAccess.created_on where
+  //                     created_by=me and user_id≠me — when I last shared
+  //                     the folder with anyone (re-shares bump to top).
+  //                     NOTE: folder access uses `created_by` to record the
+  //                     granter (file access uses `granted_by`); we mirror
+  //                     the same predicate as the visibility filter above.
+  // A folder with no matching access row (project-visible via role rights,
+  // not directly shared) gets shared_at=0 and falls to the end. We expose
+  // `_sharedAt` on the response for the FE to render "Shared on …".
+  //
+  // NOTE on pagination: the DB query above was already sliced by
+  // limit/offset using buildFolderSort. Re-sorting only this page is fine
+  // while the FE fetches the whole list in one shot. If pagination is
+  // later enabled for these tabs, the join needs to move into the DB
+  // query (aggregation $lookup).
+  if (
+    (listingQuery.quickFilter === 'shared' || listingQuery.quickFilter === 'shared_by_me')
+    && foldersWithPermissions.length > 0
+  ) {
+    const folderIds = foldersWithPermissions.map((f) => f._id);
+    const accessFilter = {
+      project_id: project._id,
+      folder_id: { $in: folderIds },
+      deleted_on: 0,
+    };
+    if (listingQuery.quickFilter === 'shared') {
+      accessFilter.user_id = user._id;
+    } else {
+      // shared_by_me — rows where I granted access to someone else.
+      accessFilter.created_by = user._id;
+      accessFilter.user_id = { $ne: user._id };
+    }
+    const myAccesses = await DriveFolderAccessRepository.getAccesses({
+      filters: accessFilter,
+    });
+    const sharedAtByFolderId = new Map();
+    for (const a of myAccesses) {
+      const fid = String(a.folder_id?._id || a.folder_id);
+      const t = a.created_on || 0;
+      // Multiple rows possible: re-share after delete OR one row per
+      // recipient in shared_by_me — keep the max either way.
+      if (!sharedAtByFolderId.has(fid) || sharedAtByFolderId.get(fid) < t) {
+        sharedAtByFolderId.set(fid, t);
+      }
+    }
+    for (const f of foldersWithPermissions) {
+      f._sharedAt = sharedAtByFolderId.get(String(f._id)) || 0;
+    }
+    foldersWithPermissions.sort((a, b) => (b._sharedAt || 0) - (a._sharedAt || 0));
+  }
+
   if (!shouldReturnMeta) {
     return foldersWithPermissions;
   }
@@ -870,6 +926,10 @@ const getDriveContents = async ({ user, project, query }) => {
     const folderTotal = aggResult?.folderCount?.[0]?.count || 0;
     const fileTotal = aggResult?.fileCount?.[0]?.count || 0;
 
+    await _enrichContentsWithSharedAt({
+      items, user, project, quickFilter: listingQuery.quickFilter,
+    });
+
     return {
       items,
       pagination: {
@@ -902,6 +962,10 @@ const getDriveContents = async ({ user, project, query }) => {
   const folderTotal = aggResult?.folderCount?.[0]?.count || 0;
   const fileTotal = aggResult?.fileCount?.[0]?.count || 0;
 
+  await _enrichContentsWithSharedAt({
+    items, user, project, quickFilter: listingQuery.quickFilter,
+  });
+
   return {
     items,
     pagination: {
@@ -913,6 +977,85 @@ const getDriveContents = async ({ user, project, query }) => {
     counts: { folders: folderTotal, files: fileTotal, total },
     grouping: buildContentGrouping({ items, groupBy: listingQuery.groupBy }),
   };
+};
+
+// Mirror of the per-endpoint shared-tab post-sort for the unified
+// /folders/contents aggregation pipeline. The aggregation returns a mixed
+// array of files + folders, so we batch-lookup BOTH access collections in
+// parallel, build a single id→shared_at map, annotate each item with
+// `_sharedAt`, and re-sort. No-op for any other quick_filter — items are
+// returned in the DB-side _sort_date order (updated_on desc).
+//
+// Pagination caveat applies here too: the aggregation pre-sliced by
+// _sort_date, so re-sorting only the current page is correct ONLY when
+// the FE asks for the whole list in one shot. A future migration of this
+// join into a $lookup stage would fix that.
+const _enrichContentsWithSharedAt = async ({
+  items, user, project, quickFilter,
+}) => {
+  if (
+    (quickFilter !== 'shared' && quickFilter !== 'shared_by_me')
+    || !items
+    || items.length === 0
+  ) {
+    return;
+  }
+
+  const fileIds = [];
+  const folderIds = [];
+  for (const it of items) {
+    if (it?.is_folder) folderIds.push(it._id);
+    else fileIds.push(it._id);
+  }
+
+  const folderAccessFilter = folderIds.length > 0 ? {
+    project_id: project._id,
+    folder_id: { $in: folderIds },
+    deleted_on: 0,
+    ...(quickFilter === 'shared'
+      ? { user_id: user._id }
+      : { created_by: user._id, user_id: { $ne: user._id } }),
+  } : null;
+
+  const fileAccessFilter = fileIds.length > 0 ? {
+    project_id: project._id,
+    file_id: { $in: fileIds },
+    deleted_on: 0,
+    ...(quickFilter === 'shared'
+      ? { user_id: user._id }
+      : { granted_by: user._id, user_id: { $ne: user._id } }),
+  } : null;
+
+  const [folderAccesses, fileAccesses] = await Promise.all([
+    folderAccessFilter
+      ? DriveFolderAccessRepository.getAccesses({ filters: folderAccessFilter })
+      : Promise.resolve([]),
+    fileAccessFilter
+      ? DriveFileAccessRepository.getAccesses({ filters: fileAccessFilter })
+      : Promise.resolve([]),
+  ]);
+
+  // Single id→shared_at map keyed by string id. Files and folders cannot
+  // share ObjectId values across collections in practice, so a flat map
+  // is safe.
+  const sharedAtById = new Map();
+  const upsertMax = (id, t) => {
+    const key = String(id);
+    if (!sharedAtById.has(key) || sharedAtById.get(key) < t) {
+      sharedAtById.set(key, t);
+    }
+  };
+  for (const a of folderAccesses) {
+    upsertMax(a.folder_id?._id || a.folder_id, a.created_on || 0);
+  }
+  for (const a of fileAccesses) {
+    upsertMax(a.file_id?._id || a.file_id, a.created_on || 0);
+  }
+
+  for (const it of items) {
+    it._sharedAt = sharedAtById.get(String(it._id)) || 0;
+  }
+  items.sort((a, b) => (b._sharedAt || 0) - (a._sharedAt || 0));
 };
 
 const getFolder = async ({ user, project, params }) => {
@@ -1339,7 +1482,6 @@ const getFolderContents = async ({ user, project, params }) => {
 
   const subfolders = await DriveFolderRepository.getFolders({
     filters: subfolderFilters,
-    sort: { created_on: -1 },
   });
 
   const files = await DriveFileRepository.getFiles({
@@ -1348,7 +1490,6 @@ const getFolderContents = async ({ user, project, params }) => {
       project_id: project._id,
       deleted_on: 0,
     },
-    sort: { created_on: -1 },
   });
 
   return {
@@ -1611,22 +1752,37 @@ const moveFolder = async ({ user, project, device, params, body }) => {
     console.error('[moveFolder_notify_failed]:', err.message);
   }
 
-  // ZL-18871/-18872: re-anchor the level chain of every unread notification
-  // in the MOVED SUBTREE — descendant folders + the files inside them — not
-  // just the moved folder itself (handled above). After a move, every
-  // descendant's root ancestor changes, so their badges' level_1..level_3
-  // still point at the OLD ancestry and the FE BadgeDB rolls them up to the
-  // pre-move location (e.g. a file inside the moved folder keeps rolling up
-  // to the folder's old root instead of the new parent).
+  // ZL-18871/-18872: re-anchor every unread badge in the MOVED SUBTREE
+  // — descendant folders + the files inside them — so they roll up under
+  // the new ancestor.
   //
-  // The level chain (level_1..levels) is identical for a folder and every
-  // file directly inside it (it's the folder's ancestry; only reference_id
-  // differs), so we compute it ONCE per subtree folder and apply the level
-  // fields to that folder's own badge + all its file badges. reference_id is
-  // left unchanged and the badges stay unread, so they re-roll under the new
-  // ancestor. Silent in-place update — no fresh FCM (the folder-move FCM is
-  // already emitted above); receivers see the corrected rollup on their next
-  // "Shared with Me" refresh / notification re-fetch.
+  // Why a three-phase flow (mark-read → silent-drop → fresh-save) instead
+  // of an in-place level_* rewrite:
+  //   Clients that work purely off socket events (iOS in particular) maintain
+  //   their badge list from notification:save (add) and notification:silent
+  //   (drop) events alone — they do NOT issue a /notifications GET after a
+  //   silent event. So an in-place DB rewrite of level_1..3 is invisible to
+  //   iOS: the badge keeps its pre-move levels in the local store and rolls
+  //   up under the OLD ancestor forever, until the app cold-starts.
+  //
+  // Three-phase flow mirrors what the moved-folder OWN block does at
+  // 1691-1747 — the canonical share/move pattern in this codebase:
+  //   1) MARK READ in DB the original unread subtree notifications, so they
+  //      no longer count toward badges anywhere (cold-fetch or otherwise).
+  //   2) SILENT DROP per receiver — emit notification:silent carrying
+  //      read_notification_ids = [original uuids]; each client evicts those
+  //      uuids from its local badge cache.
+  //   3) FRESH SAVE per (item, receiver) — emit notification:save with
+  //      action drive_folder_subtree_reanchored and a NEW level chain
+  //      computed from the moved folder's new path. notify:false suppresses
+  //      FCM push so the user's device doesn't get one phone push per
+  //      descendant (the user already got a single Folder moved push from
+  //      the block above); save:true persists the new notification in DB
+  //      so cold-fetch is also correct.
+  //
+  // Cost: O(items × receivers) save events, but all marked silent at the
+  // FCM layer (notify:false). For a deep subtree this is a burst of socket
+  // messages — acceptable, since it only fires once per folder move.
   try {
     const subtreeFolderIds = await DriveAccessService.collectDescendantFolderIds({
       projectId: project._id,
@@ -1641,35 +1797,186 @@ const moveFolder = async ({ user, project, device, params, body }) => {
       },
     });
 
-    await Promise.all(subtreeFolderIds.map(async (sId) => {
-      const chain = await DriveNotificationReceivers.buildNotificationLevels({
-        project, folderId: sId, itemId: sId,
-      });
-      const fileIdsInFolder = subtreeFiles
-        .filter((f) => idsEqual(f.folder_id, sId))
-        .map((f) => toIdString(f._id));
-      // The moved folder's OWN badge is already handled by the block above
-      // (mark-read + re-emit), so skip it here; still re-anchor its files.
-      const refIds = [
-        ...(idsEqual(sId, updatedFolder._id) ? [] : [toIdString(sId)]),
-        ...fileIdsInFolder,
-      ].filter(Boolean);
-      if (refIds.length === 0) return;
+    // Aggregate every reference_id we want to re-anchor. Excludes the moved
+    // folder's OWN id — its badge is handled by the silent-drop + fresh save
+    // block above (1691-1747).
+    const allSubtreeRefIds = [
+      ...subtreeFolderIds
+        .filter((sId) => !idsEqual(sId, updatedFolder._id))
+        .map(toIdString),
+      ...subtreeFiles.map((f) => toIdString(f._id)),
+    ].filter(Boolean);
+
+    // Capture prior unread notifications BEFORE we mark them read. We need
+    // their notification_uuid (for silent-drop), receiver (for fan-out), and
+    // unit (to emit the matching fresh save with the right resource kind).
+    const priorSubtreeNotifications = allSubtreeRefIds.length > 0
+      ? await NotificationRepository.getNotifications({
+        filters: {
+          project_id: project._id,
+          reference_id: { $in: allSubtreeRefIds },
+          message_read: false,
+        },
+      })
+      : [];
+
+    if (priorSubtreeNotifications.length > 0) {
+      // Phase 1 — mark originals as read so they no longer drive badges.
+      // The fresh-save phase creates replacement notifications with the
+      // correct level chain; without the mark-read, cold-fetch clients
+      // would see duplicate badges.
       await NotificationRepository.updateNotification({
         filters: {
           project_id: project._id,
-          reference_id: { $in: refIds },
+          reference_id: { $in: allSubtreeRefIds },
           message_read: false,
         },
-        data: {
-          level_1: chain.level_1,
-          level_2: chain.level_2,
-          level_3: chain.level_3,
-          levels: chain.levels,
-          updated: Date.now(),
-        },
+        data: { message_read: true, updated: Date.now() },
       });
-    }));
+
+      // Phase 2 — silent drop per receiver so each client evicts the
+      // pre-move uuids from its local badge cache. action label is
+      // backend-internal — FE silent handler keys off
+      // notification:silent + read_notification_ids, not the action name.
+      // The target parent's owner is the tab-routing anchor for the whole
+      // moved subtree (matches the moved-folder OWN block above).
+      const targetParent = updatedFolder.parent_folder_id
+        ? await _getFolderById({ project, folderId: updatedFolder.parent_folder_id })
+        : null;
+      const subtreeOwnerId = targetParent
+        ? targetParent.created_by
+        : updatedFolder.created_by;
+
+      const dropByReceiver = new Map();
+      priorSubtreeNotifications.forEach((n) => {
+        const rid = toIdString(n.receiver);
+        if (!dropByReceiver.has(rid)) dropByReceiver.set(rid, []);
+        dropByReceiver.get(rid).push(n.notification_uuid);
+      });
+
+      await Promise.all(
+        Array.from(dropByReceiver.entries()).map(([receiverId, uuids]) =>
+          DriveNotificationReceivers.notifyAllTabRouted({
+            project,
+            actor: user,
+            receiverIds: [receiverId],
+            parentFolderOwnerId: subtreeOwnerId,
+            folderId: updatedFolder.parent_folder_id || updatedFolder._id,
+            itemId: updatedFolder._id,
+            unit: DRIVE_UNIT_FOLDER,
+            action: 'drive_folder_subtree_reanchored',
+            referenceData: {
+              folder_id: toIdString(updatedFolder._id),
+              folder_name: updatedFolder.folder_name,
+              source_parent_id: folder.parent_folder_id
+                ? toIdString(folder.parent_folder_id)
+                : null,
+              target_parent_id: target_folder_id || null,
+              read_notification_ids: uuids.filter(Boolean),
+            },
+            socketClient,
+            options: { save: false, silent: true },
+          })
+        )
+      );
+
+      // Phase 3 — fan out fresh notification:save per (item, receiver) with
+      // the new level chain. Each save is FCM-suppressed (notify:false) so
+      // there's no phone push per item — the user already got a single
+      // Folder moved push from the block above. save:true persists each new
+      // notification in DB so the badge survives a cold fetch.
+      //
+      // We compute the chain ONCE per subtree folder (it's the folder's
+      // ancestry; same for a folder and every file directly inside it,
+      // only itemId / reference_id differs).
+      const priorByRefId = new Map();
+      priorSubtreeNotifications.forEach((n) => {
+        const ref = toIdString(n.reference_id);
+        if (!priorByRefId.has(ref)) priorByRefId.set(ref, []);
+        priorByRefId.get(ref).push(n);
+      });
+
+      await Promise.all(subtreeFolderIds.map(async (sId) => {
+        const folderSelfPriors = priorByRefId.get(toIdString(sId)) || [];
+        const filesInThisFolder = subtreeFiles.filter((f) => idsEqual(f.folder_id, sId));
+
+        const emits = [];
+
+        // Folder sId itself — skip the moved root (handled by the
+        // moved-folder OWN block above).
+        if (!idsEqual(sId, updatedFolder._id) && folderSelfPriors.length > 0) {
+          const folderReceivers = Array.from(new Set(
+            folderSelfPriors.map((n) => toIdString(n.receiver))
+          )).filter(Boolean);
+
+          if (folderReceivers.length > 0) {
+            emits.push(DriveNotificationReceivers.notifyAllTabRouted({
+              project,
+              actor: user,
+              receiverIds: folderReceivers,
+              parentFolderOwnerId: subtreeOwnerId,
+              folderId: sId,
+              itemId: sId,
+              unit: DRIVE_UNIT_FOLDER,
+              action: 'drive_folder_subtree_reanchored',
+              referenceData: {
+                folder_id: toIdString(updatedFolder._id),
+                folder_name: updatedFolder.folder_name,
+                source_parent_id: folder.parent_folder_id
+                  ? toIdString(folder.parent_folder_id)
+                  : null,
+                target_parent_id: target_folder_id || null,
+                descendant_folder_id: toIdString(sId),
+              },
+              socketClient,
+              // notify:false → no FCM push (already sent for the move root).
+              // save:true → persist new notification in DB + emit
+              //             notification:save so clients add the badge.
+              options: { notify: false, save: true },
+            }));
+          }
+        }
+
+        // Each file directly inside sId.
+        for (const file of filesInThisFolder) {
+          const filePriors = priorByRefId.get(toIdString(file._id)) || [];
+          if (filePriors.length === 0) continue;
+
+          const fileReceivers = Array.from(new Set(
+            filePriors.map((n) => toIdString(n.receiver))
+          )).filter(Boolean);
+
+          if (fileReceivers.length > 0) {
+            emits.push(DriveNotificationReceivers.notifyAllTabRouted({
+              project,
+              actor: user,
+              receiverIds: fileReceivers,
+              parentFolderOwnerId: subtreeOwnerId,
+              // folderId is the file's parent; drives the level chain.
+              folderId: sId,
+              itemId: file._id,
+              unit: DRIVE_UNIT_FILE,
+              action: 'drive_folder_subtree_reanchored',
+              referenceData: {
+                folder_id: toIdString(updatedFolder._id),
+                folder_name: updatedFolder.folder_name,
+                source_parent_id: folder.parent_folder_id
+                  ? toIdString(folder.parent_folder_id)
+                  : null,
+                target_parent_id: target_folder_id || null,
+                file_id: toIdString(file._id),
+                file_name: file.file_name,
+                parent_folder_id: toIdString(sId),
+              },
+              socketClient,
+              options: { notify: false, save: true },
+            }));
+          }
+        }
+
+        if (emits.length > 0) await Promise.all(emits);
+      }));
+    }
   } catch (err) {
     // Non-fatal — the move + folder-level notification already succeeded.
     console.error('[moveFolder_subtree_reanchor_failed]:', err.message);
