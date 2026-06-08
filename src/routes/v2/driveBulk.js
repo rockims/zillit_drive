@@ -25,4 +25,14 @@ router.post('/download-urls', moduledata, checkAccess, driveViewAccess, DriveBul
 // Bulk download as ZIP (streams)
 router.post('/download-zip', moduledata, checkAccess, driveViewAccess, DriveBulk.bulkDownloadZip);
 
+// Bulk favorite — add / remove / toggle starred on many files+folders
+// in one call. Body: { items: [{ id, type }], mode?: 'add'|'remove'|'toggle' }.
+router.post('/favorite', moduledata, checkAccess, drivePostAccess, DriveBulk.bulkFavorite);
+
+// Bulk share — apply the same access list to many files+folders. Body:
+// { items: [{ id, type }], entries: [{ user_id, can_view, can_edit,
+// can_download, role? }], replace_existing?: boolean }. Files use the
+// boolean perms; folders use `role` (or derive from can_edit).
+router.post('/share', moduledata, checkAccess, drivePostAccess, DriveBulk.bulkShare);
+
 export default router;
