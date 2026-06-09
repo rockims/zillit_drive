@@ -7,6 +7,8 @@ import DriveFolderRepository from '../../repositories/v2/driveFolder.js';
 import DriveAccessService from './driveAccess.js';
 import DriveFileAccessService from './driveFileAccess.js';
 import DriveActivityService from './driveActivity.js';
+import DriveFolderService from './driveFolder.js';
+import DriveFileService from './driveFile.js';
 import BadRequest from 'zillit-libs/errors/BadRequest';
 import socketClient from '../../config/socketClient.js';
 
@@ -156,97 +158,63 @@ const bulkMove = async ({ user, project, device, body }) => {
     }
   }
 
-  const now = Date.now();
   const results = { moved: 0, failed: 0, errors: [] };
 
+  // ZL-18871: delegate each item to the single-item move services
+  // (moveFolder / moveFile) instead of writing parent_folder_id /
+  // folder_id directly here. Those services own the full badge flow —
+  // silent-drop of the moved item's prior unread badges
+  // (notification:silent + read_notification_ids), the fresh
+  // drive_folder_moved / drive_file_moved save with the new level_1, the
+  // subtree re-anchor for descendants, descendant path refresh, and the
+  // target-folder ACL snapshot. The old inline updateFolder/updateFile
+  // here emitted ONLY the drive:bulk:moved summary socket and no
+  // notifications at all, so socket-only clients (iOS) never re-anchored
+  // the moved item's badge → destination count never went up. The iOS
+  // Drive UI moves folders via THIS bulk endpoint, not PUT /:id/move,
+  // which is why the moveFolder fix alone didn't surface for them.
   for (const item of items) {
     try {
       if (item.type === 'folder') {
-        const folder = await DriveFolderRepository.getFolder({
-          filters: { _id: item.id, project_id: project._id, deleted_on: 0 },
-        });
-        if (!folder) {
-          results.failed++;
-          results.errors.push({ id: item.id, error: 'not_found' });
-          continue;
-        }
-
-        // Check editor access before moving
-        await DriveAccessService.assertFolderAccess({
-          user, project, folder, minRole: 'editor',
-        });
-
-        await DriveFolderRepository.updateFolder({
-          filters: { _id: item.id, project_id: project._id, deleted_on: 0 },
-          data: {
-            parent_folder_id: target_folder_id || null,
-            updated_by: user._id,
-            updated_on: now,
-          },
+        await DriveFolderService.moveFolder({
+          user,
+          project,
+          device,
+          params: { folderId: item.id },
+          body: { target_folder_id: target_folder_id || null },
         });
       } else {
-        const file = await DriveFileRepository.getFile({
-          filters: { _id: item.id, project_id: project._id, deleted_on: 0 },
+        await DriveFileService.moveFile({
+          user,
+          project,
+          device,
+          params: { fileId: item.id },
+          body: { target_folder_id: target_folder_id || null },
         });
-        if (!file) {
-          results.failed++;
-          results.errors.push({ id: item.id, error: 'not_found' });
-          continue;
-        }
-
-        // Enforce file-level edit permission before moving
-        await DriveFileAccessService.assertFileAccess({ user, project, file, permission: 'edit' });
-
-        await DriveFileRepository.updateFile({
-          filters: { _id: item.id, project_id: project._id, deleted_on: 0 },
-          data: {
-            folder_id: target_folder_id || null,
-            updated_by: user._id,
-            updated_on: now,
-          },
-        });
-
-        // ZL-18478: snapshot the target folder's ACL onto the moved file so
-        // folder members appear in the file's "shared with" list. Wrapped in
-        // try/catch — the move already succeeded, never let an ACL snapshot
-        // hiccup downgrade the result.moved counter. Same helper as moveFile.
-        if (targetFolder) {
-          try {
-            await DriveFileAccessService.snapshotFolderAccessToFile({
-              project,
-              file: { ...file._doc || file, folder_id: target_folder_id },
-              folder: targetFolder,
-              actorId: user._id,
-            });
-          } catch (err) {
-            console.error('[bulkMove] snapshotFolderAccessToFile failed:', err.message);
-          }
-        }
       }
       results.moved++;
     } catch (err) {
-      results.failed++;
-      results.errors.push({ id: item.id, error: err.message });
+      // A no-op move (item already lives in the target) is not a failure
+      // for a bulk operation — count it as moved and move on. Everything
+      // else is a real per-item failure.
+      if (err && err.message === 'folder_already_in_target') {
+        results.moved++;
+      } else {
+        results.failed++;
+        results.errors.push({ id: item.id, error: err && err.message });
+      }
     }
   }
 
+  // Bulk-level summary socket so the list UIs can do a single refresh.
+  // Per-item drive:folder:moved / drive:file:moved sockets, activity
+  // logs, and badge notifications are emitted inside moveFolder /
+  // moveFile — no redundant per-item activity log here (would duplicate).
   socketClient('__admin_events__', {
     event: 'drive:bulk:moved',
     room: `${project._id.toString()}_room`,
     data: { project_id: project._id, results },
   });
-
-  // Activity log for each successfully moved item (fire-and-forget)
-  for (const item of items) {
-    if (!results.errors.find((e) => e.id === item.id)) {
-      DriveActivityService.log({
-        projectId: project._id, userId: user._id,
-        action: item.type === 'folder' ? 'folder_moved' : 'file_moved',
-        itemId: item.id, itemType: item.type,
-        details: { target_folder_id: target_folder_id || null, bulk: true },
-      });
-    }
-  }
 
   return results;
 };
