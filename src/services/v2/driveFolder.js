@@ -1615,15 +1615,33 @@ const moveFolder = async ({ user, project, device, params, body }) => {
   });
   if (duplicateFolder) throw new BadRequest('duplicate_folder_name');
 
-  // 8. Update the folder's parent
-  const updatedFolder = await DriveFolderRepository.updateFolder({
-    filters: { _id: folderId },
+  // 8. Update the folder's parent.
+  // MUST use updateFolderDocument (findOneAndUpdate {new:true}) — NOT
+  // updateFolder (updateOne), which returns a Mongoose write-result
+  // ({acknowledged, matchedCount, modifiedCount, ...}) rather than the
+  // folder doc. With a write-result, updatedFolder._id /
+  // .parent_folder_id / .folder_name / .created_by are all undefined,
+  // which silently no-ops every downstream step: _refreshDescendantPaths,
+  // getFolderReceivers (folderId=undefined → []), the silent-drop
+  // (reference_id=null → matches nothing), the fresh drive_folder_moved
+  // save (itemId=undefined → junk level_1='root'/reference_id=null), and
+  // the subtree re-anchor (rootFolderId=undefined). Net effect (ZL-18871):
+  // the DB move succeeds but NO badge notifications fire, so socket-only
+  // clients (iOS) never re-anchor the moved folder's badge. Web masked it
+  // by re-fetching on the drive:folder:moved socket. Mirrors the
+  // updateFolder *service* which already uses updateFolderDocument.
+  const updatedFolder = await DriveFolderRepository.updateFolderDocument({
+    filters: { _id: folderId, project_id: project._id, deleted_on: 0 },
     data: {
       parent_folder_id: target_folder_id || null,
       updated_by: user._id,
       updated_on: Date.now(),
     },
   });
+
+  if (!updatedFolder) {
+    throw new BadRequest('folder_update_failed');
+  }
 
   // 9. Refresh descendant folder paths
   await _refreshDescendantPaths({ project, rootFolder: updatedFolder, user });
