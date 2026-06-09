@@ -51,6 +51,30 @@ class DriveBulk {
       }
     }
   }
+
+  async bulkFavorite(req, res) {
+    const { user, project, body } = req;
+    try {
+      const result = await DriveBulkService.bulkFavorite({ user, project, body });
+      return ApiResponse.handleResponse(res, { message: 'bulk_favorite_completed', data: result });
+    } catch (error) {
+      console.log('[bulk_favorite_failed]:');
+      return ApiResponse.handleError(res, error);
+    }
+  }
+
+  async bulkShare(req, res) {
+    const { user, project, device, body } = req;
+    try {
+      const result = await DriveBulkService.bulkShare({
+        user, project, device, body,
+      });
+      return ApiResponse.handleResponse(res, { message: 'bulk_share_completed', data: result });
+    } catch (error) {
+      console.log('[bulk_share_failed]:');
+      return ApiResponse.handleError(res, error);
+    }
+  }
 }
 
 export default new DriveBulk();
