@@ -441,11 +441,22 @@ const seedFolderAccess = async ({ project, user, folder, parentFolderId = null }
 };
 
 const getFolderAccessList = async ({ user, project, folder }) => {
+  // Reading the access list — "who else has this folder?" — is a
+  // view-level operation, not an owner-level one. The file analog
+  // (getFileAccess in driveFileAccess.js) explicitly requires only
+  // `view` with the comment "User needs at least view permission to
+  // see access list". The folder side was bootstrapped to `owner` and
+  // never re-examined; that made FileDetailsPanel work for files but
+  // 403 for folders in the SAME panel for the same editor/viewer.
+  // Modifying the list (setFolderAccessList, below) still requires
+  // owner — write semantics are unchanged. (The list responses already
+  // expose _accessUserIds / _accessCount to viewers + editors, so this
+  // closes the parity gap without revealing materially new info.)
   await assertFolderAccess({
     user,
     project,
     folder,
-    minRole: 'owner',
+    minRole: 'viewer',
   });
 
   return DriveFolderAccessRepository.getAccesses({
