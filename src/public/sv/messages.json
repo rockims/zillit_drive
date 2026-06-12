@@ -108,9 +108,9 @@
   "drive_folder_updated": "Drive-mapp uppdaterad.",
   "drive_folder_updated_message": "En Drive-mapp har uppdaterats av {{user_name}}.",
   "drive_folder_created": "Drive-mapp skapad.",
-  "drive_folder_created_message": "En Drive-mapp har skapats av {{user_name}}.",
+  "drive_folder_created_message": "En Drive-mapp har skapats.",
   "drive_folder_moved": "Drive-mapp flyttad.",
-  "drive_folder_moved_message": "En Drive-mapp har flyttats av {{user_name}}.",
+  "drive_folder_moved_message": "En Drive-mapp har flyttats.",
   "drive_folder_deleted": "Drive-mapp raderad.",
-  "drive_folder_deleted_message": "En Drive-mapp har raderats av {{user_name}}."
+  "drive_folder_deleted_message": "En Drive-mapp har raderats."
 }

@@ -108,9 +108,9 @@
   "drive_folder_updated": "Pasta do Drive atualizada.",
   "drive_folder_updated_message": "Uma pasta do Drive foi atualizada por {{user_name}}.",
   "drive_folder_created": "Pasta do Drive criada.",
-  "drive_folder_created_message": "Uma pasta do Drive foi criada por {{user_name}}.",
+  "drive_folder_created_message": "Uma pasta do Drive foi criada.",
   "drive_folder_moved": "Pasta do Drive movida.",
-  "drive_folder_moved_message": "Uma pasta do Drive foi movida por {{user_name}}.",
+  "drive_folder_moved_message": "Uma pasta do Drive foi movida.",
   "drive_folder_deleted": "Pasta do Drive excluída.",
-  "drive_folder_deleted_message": "Uma pasta do Drive foi excluída por {{user_name}}."
+  "drive_folder_deleted_message": "Uma pasta do Drive foi excluída."
 }

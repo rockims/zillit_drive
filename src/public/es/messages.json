@@ -108,9 +108,9 @@
   "drive_folder_updated": "Carpeta de Drive actualizada.",
   "drive_folder_updated_message": "Una carpeta de Drive ha sido actualizada por {{user_name}}.",
   "drive_folder_created": "Carpeta de Drive creada.",
-  "drive_folder_created_message": "Una carpeta de Drive ha sido creada por {{user_name}}.",
+  "drive_folder_created_message": "Una carpeta de Drive ha sido creada.",
   "drive_folder_moved": "Carpeta de Drive movida.",
-  "drive_folder_moved_message": "Una carpeta de Drive ha sido movida por {{user_name}}.",
+  "drive_folder_moved_message": "Una carpeta de Drive ha sido movida.",
   "drive_folder_deleted": "Carpeta de Drive eliminada.",
-  "drive_folder_deleted_message": "Una carpeta de Drive ha sido eliminada por {{user_name}}."
+  "drive_folder_deleted_message": "Una carpeta de Drive ha sido eliminada."
 }

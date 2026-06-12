@@ -108,9 +108,9 @@
   "drive_folder_updated": "Driveフォルダが更新されました。",
   "drive_folder_updated_message": "{{user_name}}がDriveフォルダを更新しました。",
   "drive_folder_created": "Driveフォルダが作成されました。",
-  "drive_folder_created_message": "{{user_name}}がDriveフォルダを作成しました。",
+  "drive_folder_created_message": "Driveフォルダが作成されました。",
   "drive_folder_moved": "Driveフォルダが移動されました。",
-  "drive_folder_moved_message": "{{user_name}}がDriveフォルダを移動しました。",
+  "drive_folder_moved_message": "Driveフォルダが移動されました。",
   "drive_folder_deleted": "Driveフォルダが削除されました。",
-  "drive_folder_deleted_message": "{{user_name}}がDriveフォルダを削除しました。"
+  "drive_folder_deleted_message": "Driveフォルダが削除されました。"
 }

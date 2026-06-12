@@ -108,9 +108,9 @@
   "drive_folder_updated": "Folder Drive zaktualizowany.",
   "drive_folder_updated_message": "{{user_name}} zaktualizował(a) folder Drive.",
   "drive_folder_created": "Folder Drive utworzony.",
-  "drive_folder_created_message": "{{user_name}} utworzył(a) folder Drive.",
+  "drive_folder_created_message": "Folder Drive został utworzony.",
   "drive_folder_moved": "Folder Drive przeniesiony.",
-  "drive_folder_moved_message": "{{user_name}} przeniósł(przeniosła) folder Drive.",
+  "drive_folder_moved_message": "Folder Drive został przeniesiony.",
   "drive_folder_deleted": "Folder Drive usunięty.",
-  "drive_folder_deleted_message": "{{user_name}} usunął(usunęła) folder Drive."
+  "drive_folder_deleted_message": "Folder Drive został usunięty."
 }

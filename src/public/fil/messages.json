@@ -108,9 +108,9 @@
   "drive_folder_updated": "Na-update ang Drive folder.",
   "drive_folder_updated_message": "Na-update ni {{user_name}} ang isang Drive folder.",
   "drive_folder_created": "Nagawa ang Drive folder.",
-  "drive_folder_created_message": "Ginawa ni {{user_name}} ang isang Drive folder.",
+  "drive_folder_created_message": "Nagawa ang isang Drive folder.",
   "drive_folder_moved": "Nailipat ang Drive folder.",
-  "drive_folder_moved_message": "Inilipat ni {{user_name}} ang isang Drive folder.",
+  "drive_folder_moved_message": "Nailipat ang isang Drive folder.",
   "drive_folder_deleted": "Natanggal ang Drive folder.",
-  "drive_folder_deleted_message": "Tinanggal ni {{user_name}} ang isang Drive folder."
+  "drive_folder_deleted_message": "Natanggal ang isang Drive folder."
 }

@@ -108,9 +108,9 @@
   "drive_folder_updated": "Drive-mappe oppdatert.",
   "drive_folder_updated_message": "En Drive-mappe har blitt oppdatert av {{user_name}}.",
   "drive_folder_created": "Drive-mappe opprettet.",
-  "drive_folder_created_message": "En Drive-mappe har blitt opprettet av {{user_name}}.",
+  "drive_folder_created_message": "En Drive-mappe har blitt opprettet.",
   "drive_folder_moved": "Drive-mappe flyttet.",
-  "drive_folder_moved_message": "En Drive-mappe har blitt flyttet av {{user_name}}.",
+  "drive_folder_moved_message": "En Drive-mappe har blitt flyttet.",
   "drive_folder_deleted": "Drive-mappe slettet.",
-  "drive_folder_deleted_message": "En Drive-mappe har blitt slettet av {{user_name}}."
+  "drive_folder_deleted_message": "En Drive-mappe har blitt slettet."
 }
