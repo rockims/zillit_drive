@@ -106,5 +106,11 @@
   "drive_file_moved": "تم نقل ملف Drive.",
   "drive_file_moved_message": "تم نقل ملف Drive بواسطة {{user_name}}.",
   "drive_folder_updated": "تم تحديث مجلد Drive.",
-  "drive_folder_updated_message": "تم تحديث مجلد Drive بواسطة {{user_name}}."
+  "drive_folder_updated_message": "تم تحديث مجلد Drive بواسطة {{user_name}}.",
+  "drive_folder_created": "تم إنشاء مجلد Drive.",
+  "drive_folder_created_message": "تم إنشاء مجلد Drive.",
+  "drive_folder_moved": "تم نقل مجلد Drive.",
+  "drive_folder_moved_message": "تم نقل مجلد Drive.",
+  "drive_folder_deleted": "تم حذف مجلد Drive.",
+  "drive_folder_deleted_message": "تم حذف مجلد Drive."
 }

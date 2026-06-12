@@ -106,5 +106,11 @@
   "drive_file_moved": "Drive文件已移动。",
   "drive_file_moved_message": "{{user_name}}移动了一个Drive文件。",
   "drive_folder_updated": "Drive文件夹已更新。",
-  "drive_folder_updated_message": "{{user_name}}更新了一个Drive文件夹。"
+  "drive_folder_updated_message": "{{user_name}}更新了一个Drive文件夹。",
+  "drive_folder_created": "Drive文件夹已创建。",
+  "drive_folder_created_message": "已创建一个Drive文件夹。",
+  "drive_folder_moved": "Drive文件夹已移动。",
+  "drive_folder_moved_message": "已移动一个Drive文件夹。",
+  "drive_folder_deleted": "Drive文件夹已删除。",
+  "drive_folder_deleted_message": "已删除一个Drive文件夹。"
 }
