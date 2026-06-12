@@ -106,5 +106,11 @@
   "drive_file_moved": "Drive-Datei verschoben.",
   "drive_file_moved_message": "Eine Drive-Datei wurde von {{user_name}} verschoben.",
   "drive_folder_updated": "Drive-Ordner aktualisiert.",
-  "drive_folder_updated_message": "Ein Drive-Ordner wurde von {{user_name}} aktualisiert."
+  "drive_folder_updated_message": "Ein Drive-Ordner wurde von {{user_name}} aktualisiert.",
+  "drive_folder_created": "Drive-Ordner erstellt.",
+  "drive_folder_created_message": "Ein Drive-Ordner wurde von {{user_name}} erstellt.",
+  "drive_folder_moved": "Drive-Ordner verschoben.",
+  "drive_folder_moved_message": "Ein Drive-Ordner wurde von {{user_name}} verschoben.",
+  "drive_folder_deleted": "Drive-Ordner gelöscht.",
+  "drive_folder_deleted_message": "Ein Drive-Ordner wurde von {{user_name}} gelöscht."
 }

@@ -106,5 +106,11 @@
   "drive_file_moved": "Soubor Drive přesunut.",
   "drive_file_moved_message": "Soubor Drive přesunul {{user_name}}.",
   "drive_folder_updated": "Složka Drive aktualizována.",
-  "drive_folder_updated_message": "Složku Drive aktualizoval {{user_name}}."
+  "drive_folder_updated_message": "Složku Drive aktualizoval {{user_name}}.",
+  "drive_folder_created": "Složka Drive vytvořena.",
+  "drive_folder_created_message": "Složku Drive vytvořil {{user_name}}.",
+  "drive_folder_moved": "Složka Drive přesunuta.",
+  "drive_folder_moved_message": "Složku Drive přesunul {{user_name}}.",
+  "drive_folder_deleted": "Složka Drive odstraněna.",
+  "drive_folder_deleted_message": "Složku Drive odstranil {{user_name}}."
 }

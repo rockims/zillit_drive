@@ -106,5 +106,11 @@
   "drive_file_moved": "ย้ายไฟล์ Drive แล้ว",
   "drive_file_moved_message": "{{user_name}} ได้ย้ายไฟล์ Drive",
   "drive_folder_updated": "อัปเดตโฟลเดอร์ Drive แล้ว",
-  "drive_folder_updated_message": "{{user_name}} ได้อัปเดตโฟลเดอร์ Drive"
+  "drive_folder_updated_message": "{{user_name}} ได้อัปเดตโฟลเดอร์ Drive",
+  "drive_folder_created": "สร้างโฟลเดอร์ Drive แล้ว",
+  "drive_folder_created_message": "{{user_name}} ได้สร้างโฟลเดอร์ Drive",
+  "drive_folder_moved": "ย้ายโฟลเดอร์ Drive แล้ว",
+  "drive_folder_moved_message": "{{user_name}} ได้ย้ายโฟลเดอร์ Drive",
+  "drive_folder_deleted": "ลบโฟลเดอร์ Drive แล้ว",
+  "drive_folder_deleted_message": "{{user_name}} ได้ลบโฟลเดอร์ Drive"
 }

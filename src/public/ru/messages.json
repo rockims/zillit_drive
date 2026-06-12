@@ -106,5 +106,11 @@
   "drive_file_moved": "Файл Drive перемещен.",
   "drive_file_moved_message": "{{user_name}} переместил(а) файл Drive.",
   "drive_folder_updated": "Папка Drive обновлена.",
-  "drive_folder_updated_message": "{{user_name}} обновил(а) папку Drive."
+  "drive_folder_updated_message": "{{user_name}} обновил(а) папку Drive.",
+  "drive_folder_created": "Папка Drive создана.",
+  "drive_folder_created_message": "{{user_name}} создал(а) папку Drive.",
+  "drive_folder_moved": "Папка Drive перемещена.",
+  "drive_folder_moved_message": "{{user_name}} переместил(а) папку Drive.",
+  "drive_folder_deleted": "Папка Drive удалена.",
+  "drive_folder_deleted_message": "{{user_name}} удалил(а) папку Drive."
 }

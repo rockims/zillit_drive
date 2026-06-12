@@ -106,5 +106,11 @@
   "drive_file_moved": "File Drive dipindahkan.",
   "drive_file_moved_message": "File Drive telah dipindahkan oleh {{user_name}}.",
   "drive_folder_updated": "Folder Drive diperbarui.",
-  "drive_folder_updated_message": "Folder Drive telah diperbarui oleh {{user_name}}."
+  "drive_folder_updated_message": "Folder Drive telah diperbarui oleh {{user_name}}.",
+  "drive_folder_created": "Folder Drive dibuat.",
+  "drive_folder_created_message": "Folder Drive telah dibuat oleh {{user_name}}.",
+  "drive_folder_moved": "Folder Drive dipindahkan.",
+  "drive_folder_moved_message": "Folder Drive telah dipindahkan oleh {{user_name}}.",
+  "drive_folder_deleted": "Folder Drive dihapus.",
+  "drive_folder_deleted_message": "Folder Drive telah dihapus oleh {{user_name}}."
 }

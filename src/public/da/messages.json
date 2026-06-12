@@ -106,5 +106,11 @@
   "drive_file_moved": "Drive-fil flyttet.",
   "drive_file_moved_message": "En Drive-fil er blevet flyttet af {{user_name}}.",
   "drive_folder_updated": "Drive-mappe opdateret.",
-  "drive_folder_updated_message": "En Drive-mappe er blevet opdateret af {{user_name}}."
+  "drive_folder_updated_message": "En Drive-mappe er blevet opdateret af {{user_name}}.",
+  "drive_folder_created": "Drive-mappe oprettet.",
+  "drive_folder_created_message": "En Drive-mappe er blevet oprettet af {{user_name}}.",
+  "drive_folder_moved": "Drive-mappe flyttet.",
+  "drive_folder_moved_message": "En Drive-mappe er blevet flyttet af {{user_name}}.",
+  "drive_folder_deleted": "Drive-mappe slettet.",
+  "drive_folder_deleted_message": "En Drive-mappe er blevet slettet af {{user_name}}."
 }

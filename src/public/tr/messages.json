@@ -106,5 +106,11 @@
   "drive_file_moved": "Drive dosyası taşındı.",
   "drive_file_moved_message": "Bir Drive dosyası {{user_name}} tarafından taşındı.",
   "drive_folder_updated": "Drive klasörü güncellendi.",
-  "drive_folder_updated_message": "Bir Drive klasörü {{user_name}} tarafından güncellendi."
+  "drive_folder_updated_message": "Bir Drive klasörü {{user_name}} tarafından güncellendi.",
+  "drive_folder_created": "Drive klasörü oluşturuldu.",
+  "drive_folder_created_message": "Bir Drive klasörü {{user_name}} tarafından oluşturuldu.",
+  "drive_folder_moved": "Drive klasörü taşındı.",
+  "drive_folder_moved_message": "Bir Drive klasörü {{user_name}} tarafından taşındı.",
+  "drive_folder_deleted": "Drive klasörü silindi.",
+  "drive_folder_deleted_message": "Bir Drive klasörü {{user_name}} tarafından silindi."
 }
