@@ -106,5 +106,11 @@
   "drive_file_moved": "Fichier Drive déplacé.",
   "drive_file_moved_message": "Un fichier Drive a été déplacé par {{user_name}}.",
   "drive_folder_updated": "Dossier Drive mis à jour.",
-  "drive_folder_updated_message": "Un dossier Drive a été mis à jour par {{user_name}}."
+  "drive_folder_updated_message": "Un dossier Drive a été mis à jour par {{user_name}}.",
+  "drive_folder_created": "Dossier Drive créé.",
+  "drive_folder_created_message": "Un dossier Drive a été créé.",
+  "drive_folder_moved": "Dossier Drive déplacé.",
+  "drive_folder_moved_message": "Un dossier Drive a été déplacé.",
+  "drive_folder_deleted": "Dossier Drive supprimé.",
+  "drive_folder_deleted_message": "Un dossier Drive a été supprimé."
 }

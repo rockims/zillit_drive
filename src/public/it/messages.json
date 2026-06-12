@@ -106,5 +106,11 @@
   "drive_file_moved": "File Drive spostato.",
   "drive_file_moved_message": "Un file Drive è stato spostato da {{user_name}}.",
   "drive_folder_updated": "Cartella Drive aggiornata.",
-  "drive_folder_updated_message": "Una cartella Drive è stata aggiornata da {{user_name}}."
+  "drive_folder_updated_message": "Una cartella Drive è stata aggiornata da {{user_name}}.",
+  "drive_folder_created": "Cartella Drive creata.",
+  "drive_folder_created_message": "Una cartella Drive è stata creata.",
+  "drive_folder_moved": "Cartella Drive spostata.",
+  "drive_folder_moved_message": "Una cartella Drive è stata spostata.",
+  "drive_folder_deleted": "Cartella Drive eliminata.",
+  "drive_folder_deleted_message": "Una cartella Drive è stata eliminata."
 }

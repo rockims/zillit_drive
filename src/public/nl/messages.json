@@ -106,5 +106,11 @@
   "drive_file_moved": "Drive-bestand verplaatst.",
   "drive_file_moved_message": "Een Drive-bestand is verplaatst door {{user_name}}.",
   "drive_folder_updated": "Drive-map bijgewerkt.",
-  "drive_folder_updated_message": "Een Drive-map is bijgewerkt door {{user_name}}."
+  "drive_folder_updated_message": "Een Drive-map is bijgewerkt door {{user_name}}.",
+  "drive_folder_created": "Drive-map aangemaakt.",
+  "drive_folder_created_message": "Een Drive-map is aangemaakt.",
+  "drive_folder_moved": "Drive-map verplaatst.",
+  "drive_folder_moved_message": "Een Drive-map is verplaatst.",
+  "drive_folder_deleted": "Drive-map verwijderd.",
+  "drive_folder_deleted_message": "Een Drive-map is verwijderd."
 }
