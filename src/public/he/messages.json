@@ -106,5 +106,11 @@
   "drive_file_moved": "קובץ Drive הועבר.",
   "drive_file_moved_message": "{{user_name}} העביר קובץ Drive.",
   "drive_folder_updated": "תיקיית Drive עודכנה.",
-  "drive_folder_updated_message": "{{user_name}} עדכן תיקיית Drive."
+  "drive_folder_updated_message": "{{user_name}} עדכן תיקיית Drive.",
+  "drive_folder_created": "תיקיית Drive נוצרה.",
+  "drive_folder_created_message": "תיקיית Drive נוצרה.",
+  "drive_folder_moved": "תיקיית Drive הועברה.",
+  "drive_folder_moved_message": "תיקיית Drive הועברה.",
+  "drive_folder_deleted": "תיקיית Drive נמחקה.",
+  "drive_folder_deleted_message": "תיקיית Drive נמחקה."
 }

@@ -106,5 +106,11 @@
   "drive_file_moved": "Drive 파일이 이동되었습니다.",
   "drive_file_moved_message": "{{user_name}}님이 Drive 파일을 이동했습니다.",
   "drive_folder_updated": "Drive 폴더가 업데이트되었습니다.",
-  "drive_folder_updated_message": "{{user_name}}님이 Drive 폴더를 업데이트했습니다."
+  "drive_folder_updated_message": "{{user_name}}님이 Drive 폴더를 업데이트했습니다.",
+  "drive_folder_created": "Drive 폴더가 생성되었습니다.",
+  "drive_folder_created_message": "Drive 폴더가 생성되었습니다.",
+  "drive_folder_moved": "Drive 폴더가 이동되었습니다.",
+  "drive_folder_moved_message": "Drive 폴더가 이동되었습니다.",
+  "drive_folder_deleted": "Drive 폴더가 삭제되었습니다.",
+  "drive_folder_deleted_message": "Drive 폴더가 삭제되었습니다."
 }
