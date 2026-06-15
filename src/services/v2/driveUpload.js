@@ -4,6 +4,7 @@ import {
   CompleteMultipartUploadCommand,
   AbortMultipartUploadCommand,
   UploadPartCommand,
+  PutObjectCommand,
 } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import crypto from 'crypto';
@@ -134,11 +135,55 @@ const initiateUpload = async ({ user, project, device, body }) => {
   });
   if (existingFile) throw new BadRequest('duplicate_file_name');
 
-  // Compute chunks
-  const chunkSize = computeChunkSize(file_size_bytes);
-  const totalParts = Math.ceil(file_size_bytes / chunkSize);
   const resolvedMime = getMimeType(file_name, mime_type);
   const s3Key = generateS3Key(project._id, folder_id, file_name);
+  const expiresAt = new Date(Date.now() + SESSION_TTL_HOURS * 60 * 60 * 1000);
+
+  // 0-byte fast path: S3 multipart requires ≥ 1 part ≥ 1 byte, so we use a
+  // single PutObject with empty body instead. The 0-byte object is written
+  // here in initiateUpload — completeUpload just creates the DB record.
+  if (file_size_bytes === 0) {
+    await s3.send(new PutObjectCommand({
+      Bucket: S3_BUCKET,
+      Key: s3Key,
+      Body: '',
+      ContentType: resolvedMime,
+      Metadata: {
+        project_id: toIdString(project._id),
+        user_id: toIdString(user._id),
+        original_name: encodeURIComponent(file_name),
+      },
+    }));
+
+    const session = await DriveUploadSession.create({
+      project_id: project._id,
+      folder_id: folder_id || null,
+      user_id: user._id,
+      file_name,
+      file_size_bytes: 0,
+      mime_type: resolvedMime,
+      s3_key: s3Key,
+      s3_bucket: S3_BUCKET,
+      s3_region: S3_REGION,
+      total_parts: 0,
+      parts: [],
+      file_access: file_access || [],
+      status: 'active',
+      zero_byte: true,
+      expires_at: expiresAt,
+    });
+
+    return {
+      upload_id: session._id,
+      presigned_urls: [],
+      total_parts: 0,
+      expires_at: expiresAt,
+    };
+  }
+
+  // Standard multipart path (≥ 1 byte)
+  const chunkSize = computeChunkSize(file_size_bytes);
+  const totalParts = Math.ceil(file_size_bytes / chunkSize);
 
   // Create S3 multipart upload
   const createCmd = new CreateMultipartUploadCommand({
@@ -169,7 +214,6 @@ const initiateUpload = async ({ user, project, device, body }) => {
   );
 
   // Save upload session
-  const expiresAt = new Date(Date.now() + SESSION_TTL_HOURS * 60 * 60 * 1000);
   const session = await DriveUploadSession.create({
     project_id: project._id,
     folder_id: folder_id || null,
@@ -243,35 +287,37 @@ const completeUpload = async ({ user, project, device, params, body }) => {
     throw new BadRequest('upload_session_not_found');
   }
 
-  // Verify all parts are present
-  if (parts.length !== session.total_parts) {
-    throw new BadRequest('parts_count_mismatch');
+  // 0-byte sessions had their S3 object written via PutObject in
+  // initiateUpload — nothing to finalize. Standard sessions complete the
+  // multipart upload now.
+  const isZeroByte = session.zero_byte === true || session.file_size_bytes === 0;
+
+  if (!isZeroByte) {
+    if (parts.length !== session.total_parts) {
+      throw new BadRequest('parts_count_mismatch');
+    }
+
+    await s3.send(new CompleteMultipartUploadCommand({
+      Bucket: session.s3_bucket,
+      Key: session.s3_key,
+      UploadId: session.s3_upload_id,
+      MultipartUpload: {
+        Parts: parts
+          .sort((a, b) => a.part_number - b.part_number)
+          .map((p) => ({ PartNumber: p.part_number, ETag: p.etag })),
+      },
+    }));
   }
 
-  // Complete S3 multipart upload
-  const completeCmd = new CompleteMultipartUploadCommand({
-    Bucket: session.s3_bucket,
-    Key: session.s3_key,
-    UploadId: session.s3_upload_id,
-    MultipartUpload: {
-      Parts: parts
-        .sort((a, b) => a.part_number - b.part_number)
-        .map((p) => ({
-          PartNumber: p.part_number,
-          ETag: p.etag,
-        })),
-    },
-  });
-  const s3Result = await s3.send(completeCmd);
-
-  // Mark session completed
   session.status = 'completed';
-  session.parts = parts.map((p) => ({
-    part_number: p.part_number,
-    etag: p.etag,
-    uploaded: true,
-    size: 0,
-  }));
+  session.parts = isZeroByte
+    ? []
+    : parts.map((p) => ({
+      part_number: p.part_number,
+      etag: p.etag,
+      uploaded: true,
+      size: 0,
+    }));
   session.updated_on = Date.now();
   await session.save();
 
