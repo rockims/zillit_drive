@@ -305,12 +305,30 @@ const createFolder = async ({ user, project, device, body }) => {
       }),
     ]);
     folderEventReceivers = [user._id, ...parentReceivers, ...ownAclReceivers];
-    // notifyAll receivers = same union but EXCLUDING the creator (creator is
-    // the actor and shouldn't be notified about their own action).
-    notifyReceivers = [...new Set([
-      ...parentReceivers.map((id) => toIdString(id)).filter(Boolean),
-      ...ownAclReceivers.map((id) => toIdString(id)).filter(Boolean),
-    ])];
+    // ZL-19656: the `drive_folder_created` BADGE must go ONLY to users who
+    // see the new folder appear inside a parent they already have access to
+    // (parentReceivers). Users explicitly shared on the new folder during
+    // creation (body.folder_access → setFolderAccessList above) ALREADY get
+    // a `drive_folder_shared` notification — also sending them
+    // `drive_folder_created` produced a DOUBLE badge + double notification on
+    // the receiver side (the reported bug). So:
+    //   - drop ownAclReceivers (the new folder's own ACL = explicit share
+    //     targets + parent-inherited; the inherited ones are already in
+    //     parentReceivers, the explicit ones get drive_folder_shared), and
+    //   - defensively exclude any explicit folder_access target that also
+    //     happens to be a parent sharee (otherwise they'd still double up).
+    // The real-time `drive:folder:created` socket below is unchanged — it
+    // still fans out to folderEventReceivers (incl. share targets) so the
+    // folder appears in everyone's list instantly; only the redundant badge
+    // is removed.
+    const explicitShareTargetIds = new Set(
+      (body.folder_access || [])
+        .map((entry) => toIdString(entry?.user_id))
+        .filter(Boolean),
+    );
+    notifyReceivers = [...new Set(
+      parentReceivers.map((id) => toIdString(id)).filter(Boolean),
+    )].filter((id) => !explicitShareTargetIds.has(id));
   } catch (err) {
     console.error('[createFolder] receiver resolution failed:', err.message);
   }
