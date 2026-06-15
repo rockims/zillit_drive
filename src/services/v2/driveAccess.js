@@ -576,65 +576,96 @@ const setFolderAccessList = async ({
     // Shared with Me tab — parentFolderOwnerId=null forces every receiver
     // into the sharees bucket.
     try {
-      // ZL-18486: silently mark prior unread `drive_folder_shared` for this folder +
-      // these receivers as read, then emit `notification:silent` carrying those
-      // prior notification_uuids in reference_data.read_notification_ids so the
-      // FE badge cache (badgeDB.removeBadgesFromDB at AllBadges.jsx:341-353)
-      // can drop them before we fire the new share notification.
-      const priorShareFilters = {
+      // Dedup per recipient: if a recipient already has an UNREAD
+      // `drive_folder_shared` notification for this folder whose stored
+      // folder_name matches the current folder_name, their existing
+      // badge is still accurate — skip firing a fresh one. Otherwise
+      // (no pending notif, or pending notif text is stale because the
+      // folder was renamed since), include them in the refresh flow
+      // below. Without this dedup, every re-save of the access list —
+      // even an unchanged one — created another "shared with you"
+      // notification for already-included users (reported: "I get
+      // 'shared with you' twice if they update it twice").
+      const pendingFilters = {
         project_id: project._id,
         receiver: { $in: newReceiverIds },
         reference_id: toIdString(folder._id),
         action: 'drive_folder_shared',
         message_read: false,
       };
-
-      const priorReadIds = await NotificationRepository.getNotificationIDs({
-        filters: priorShareFilters,
-        field: 'notification_uuid',
+      const pendingNotifs = await NotificationRepository.getNotifications({
+        filters: pendingFilters,
       });
+      const upToDateReceivers = new Set(
+        pendingNotifs
+          .filter((n) => (n?.reference_data?.folder_name || '') === folder.folder_name)
+          .map((n) => toIdString(n.receiver)),
+      );
+      const receiverIdsToRefresh = newReceiverIds.filter(
+        (id) => !upToDateReceivers.has(toIdString(id)),
+      );
 
-      if (priorReadIds.length > 0) {
-        await NotificationRepository.updateNotification({
+      if (receiverIdsToRefresh.length > 0) {
+        // ZL-18486: silently mark prior unread `drive_folder_shared` for this folder +
+        // the to-refresh receivers as read, then emit `notification:silent` carrying
+        // those prior notification_uuids in reference_data.read_notification_ids so
+        // the FE badge cache (badgeDB.removeBadgesFromDB at AllBadges.jsx:341-353)
+        // can drop them before we fire the new share notification.
+        const priorShareFilters = {
+          project_id: project._id,
+          receiver: { $in: receiverIdsToRefresh },
+          reference_id: toIdString(folder._id),
+          action: 'drive_folder_shared',
+          message_read: false,
+        };
+
+        const priorReadIds = await NotificationRepository.getNotificationIDs({
           filters: priorShareFilters,
-          data: { message_read: true },
+          field: 'notification_uuid',
         });
+
+        if (priorReadIds.length > 0) {
+          await NotificationRepository.updateNotification({
+            filters: priorShareFilters,
+            data: { message_read: true },
+          });
+
+          await DriveNotificationReceivers.notifyAllTabRouted({
+            project,
+            actor: user,
+            receiverIds: receiverIdsToRefresh,
+            parentFolderOwnerId: null, // all receivers → Shared with Me
+            folderId: folder._id,
+            itemId: folder._id,
+            unit: DRIVE_UNIT_FOLDER,
+            action: 'drive_folder_shared',
+            referenceData: {
+              folder_id: toIdString(folder._id),
+              folder_name: folder.folder_name,
+              read_notification_ids: priorReadIds.filter(Boolean),
+            },
+            socketClient,
+            options: { save: false, silent: true },
+          });
+        }
 
         await DriveNotificationReceivers.notifyAllTabRouted({
           project,
           actor: user,
-          receiverIds: newReceiverIds,
+          receiverIds: receiverIdsToRefresh,
           parentFolderOwnerId: null, // all receivers → Shared with Me
           folderId: folder._id,
           itemId: folder._id,
           unit: DRIVE_UNIT_FOLDER,
           action: 'drive_folder_shared',
+          message: `Folder "${folder.folder_name}" shared with you`,
           referenceData: {
             folder_id: toIdString(folder._id),
             folder_name: folder.folder_name,
-            read_notification_ids: priorReadIds.filter(Boolean),
           },
           socketClient,
-          options: { save: false, silent: true },
         });
       }
-
-      await DriveNotificationReceivers.notifyAllTabRouted({
-        project,
-        actor: user,
-        receiverIds: newReceiverIds,
-        parentFolderOwnerId: null, // all receivers → Shared with Me
-        folderId: folder._id,
-        itemId: folder._id,
-        unit: DRIVE_UNIT_FOLDER,
-        action: 'drive_folder_shared',
-        message: `Folder "${folder.folder_name}" shared with you`,
-        referenceData: {
-          folder_id: toIdString(folder._id),
-          folder_name: folder.folder_name,
-        },
-        socketClient,
-      });
     } catch (notifErr) {
       console.error('[driveAccess] Folder share notification error:', notifErr.message);
     }
