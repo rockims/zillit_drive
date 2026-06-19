@@ -18,6 +18,7 @@ import DriveFolderRepository from '../../repositories/v2/driveFolder.js';
 import DriveFileAccessRepository from '../../repositories/v2/driveFileAccess.js';
 import DriveAccessService from './driveAccess.js';
 import DriveFileAccessService from './driveFileAccess.js';
+import DriveNameResolver from './driveNameResolver.js';
 import DriveNotificationReceivers from './driveNotificationReceivers.js';
 import DriveUploadSession from 'zillit-libs/mongo-models-v2/DriveUploadSession';
 import DriveThumbnailService from './driveThumbnail.js';
@@ -106,90 +107,6 @@ const _viewingRightsUsers = async (project) => {
   return usersWithRights.filter((item) => item.view_access).map((item) => item.user_id.toString());
 };
 
-/* ───────────── Duplicate-name resolution (Finder-style auto-suffix) ─────────── */
-
-// Drive is a Private Drive (ZL-18867): duplicate-name checks are scoped
-// per-user (so a name another user owns in the same folder — including
-// files shared into your view via /shared-with-me — does NOT block your
-// upload). For uploads we go one step further: NEVER reject. If the
-// SAME user already has the same name in the target folder, append a
-// " (N)" suffix Finder/Dropbox-style:
-//
-//   report.pdf, report.pdf, report.pdf  →  report.pdf, report (1).pdf, report (2).pdf
-//   report                              →  report, report (1), report (2)
-//   v1.0.tar.gz                         →  v1.0.tar.gz, v1.0.tar (1).gz
-//                                         (suffix sits before the LAST dot — matches
-//                                         macOS Finder semantics; ".tar.gz" double-extensions
-//                                         get the suffix before .gz)
-//
-// N is the smallest available positive integer, so a gap from a deletion
-// gets reused (Finder behavior). Returns the resolved file_name; equals
-// the input when the original was already free.
-const _escapeRegex = (s) => String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-
-const resolveAvailableFileName = async ({
-  fileName, projectId, folderId, createdBy,
-}) => {
-  const trimmed = String(fileName || '').trim();
-  if (!trimmed) return trimmed;
-
-  const dot = trimmed.lastIndexOf('.');
-  const stem = dot > 0 ? trimmed.slice(0, dot) : trimmed;
-  const ext = dot > 0 ? trimmed.slice(dot) : '';
-
-  const stemEsc = _escapeRegex(stem);
-  const extEsc = _escapeRegex(ext);
-  // Match the original AND any "<stem> (N).<ext>" sibling in ONE query.
-  const familyRegex = new RegExp(`^${stemEsc}( \\(\\d+\\))?${extEsc}$`, 'i');
-
-  const existing = await DriveFileRepository.getFiles({
-    filters: {
-      project_id: projectId,
-      folder_id: folderId || null,
-      created_by: createdBy,
-      deleted_on: 0,
-      file_name: { $regex: familyRegex },
-    },
-    sort: { _id: 1 },
-  });
-
-  if (existing.length === 0) return trimmed;
-
-  // Collect taken suffix slots. Bare original (no suffix) = slot 0.
-  // Anything like "<stem> (3).<ext>" = slot 3. Case-insensitive match.
-  const taken = new Set();
-  const lowerTrimmed = trimmed.toLowerCase();
-  const suffixRegex = new RegExp(`^${stemEsc} \\((\\d+)\\)${extEsc}$`, 'i');
-  for (const f of existing) {
-    const candidate = String(f?.file_name || '').trim();
-    if (candidate.toLowerCase() === lowerTrimmed) {
-      taken.add(0);
-      continue;
-    }
-    const m = candidate.match(suffixRegex);
-    if (m) {
-      const n = parseInt(m[1], 10);
-      if (Number.isFinite(n) && n > 0) taken.add(n);
-    }
-  }
-
-  // Original is free — return it. (Happens when the regex found only
-  // sibling " (N)" copies but the base name itself is gone, e.g. user
-  // deleted "report.pdf" but kept "report (1).pdf".)
-  if (!taken.has(0)) return trimmed;
-
-  // Else find the smallest free positive integer suffix.
-  for (let i = 1; i <= 10000; i += 1) {
-    if (!taken.has(i)) {
-      return `${stem} (${i})${ext}`;
-    }
-  }
-
-  // Pathological — 10,000+ duplicates means something is very wrong; let
-  // the FE see a deterministic error rather than silently truncating.
-  throw new BadRequest('too_many_duplicate_file_names');
-};
-
 /* ───────────── Initiate Upload ───────────── */
 
 const initiateUpload = async ({ user, project, device, body }) => {
@@ -216,7 +133,7 @@ const initiateUpload = async ({ user, project, device, body }) => {
   // `resolvedFileName` for everything (S3 key, metadata, session
   // record, response) so a single source of truth flows through to
   // completeUpload.
-  const resolvedFileName = await resolveAvailableFileName({
+  const resolvedFileName = await DriveNameResolver.resolveAvailableFileName({
     fileName: file_name,
     projectId: project._id,
     folderId: folder_id,

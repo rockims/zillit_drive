@@ -11,6 +11,7 @@ import DriveFileAccessRepository from '../../repositories/v2/driveFileAccess.js'
 import DriveFolderAccessRepository from '../../repositories/v2/driveFolderAccess.js';
 import DriveAccessService from './driveAccess.js';
 import DriveActivityService from './driveActivity.js';
+import DriveNameResolver from './driveNameResolver.js';
 import DriveNotificationReceivers from './driveNotificationReceivers.js';
 import socketClient, { buildUserRooms } from '../../config/socketClient.js';
 
@@ -207,8 +208,6 @@ const _getFolderById = async ({ project, folderId }) => DriveFolderRepository.ge
 });
 
 const createFolder = async ({ user, project, device, body }) => {
-  const normalizedFolderName = body.folder_name.trim().toLowerCase();
-
   let parentFolder = null;
   if (body.parent_folder_id) {
     parentFolder = await _getFolderById({
@@ -228,28 +227,15 @@ const createFolder = async ({ user, project, device, body }) => {
     });
   }
 
-  // ZL-18867: Drive is a Private Drive — duplicate name check must be scoped to
-  // the user's own folders, not the entire project. Without created_by here,
-  // User B couldn't create a folder named "Mirror" if User A already had one.
-  const duplicateFilters = {
-    project_id: project._id,
-    parent_folder_id: body.parent_folder_id || null,
-    created_by: user._id,
-    deleted_on: 0,
-  };
-
-  const existingFolders = await DriveFolderRepository.getFolders({
-    filters: duplicateFilters,
-    sort: { _id: 1 },
+  // Never block on duplicate — auto-suffix " (N)" within the user's own
+  // namespace (Private Drive, ZL-18867). body.folder_name is overwritten
+  // with the resolved name so pickAllowedFields below picks it up.
+  body.folder_name = await DriveNameResolver.resolveAvailableFolderName({
+    folderName: body.folder_name,
+    projectId: project._id,
+    parentFolderId: body.parent_folder_id,
+    createdBy: user._id,
   });
-
-  const duplicateFolder = existingFolders.find(
-    (folder) => folder.folder_name.trim().toLowerCase() === normalizedFolderName
-  );
-
-  if (duplicateFolder) {
-    throw new BadRequest('duplicate_folder_name');
-  }
 
   const folderBody = pickAllowedFields(body, FOLDER_ALLOWED_FIELDS);
 
@@ -1619,19 +1605,17 @@ const moveFolder = async ({ user, project, device, params, body }) => {
     }
   }
 
-  // 7. Check for duplicate folder name in target
-  // ZL-18867: scope duplicate check to the user's own folders (Private Drive).
-  const duplicateFolder = await DriveFolderRepository.getFolder({
-    filters: {
-      project_id: project._id,
-      parent_folder_id: target_folder_id || null,
-      created_by: user._id,
-      deleted_on: 0,
-      _id: { $ne: folderId },
-      folder_name: { $regex: new RegExp(`^${escapeRegex(folder.folder_name.trim())}$`, 'i') },
-    },
+  // 7. Resolve a non-colliding name in the target — never block the move.
+  // Auto-suffix " (N)" within the user's own namespace (Private Drive,
+  // ZL-18867). Excludes the folder being moved. resolvedName ===
+  // folder.folder_name when the target had no collision.
+  const resolvedName = await DriveNameResolver.resolveAvailableFolderName({
+    folderName: folder.folder_name,
+    projectId: project._id,
+    parentFolderId: target_folder_id,
+    createdBy: user._id,
+    excludeId: folderId,
   });
-  if (duplicateFolder) throw new BadRequest('duplicate_folder_name');
 
   // 8. Update the folder's parent.
   // MUST use updateFolderDocument (findOneAndUpdate {new:true}) — NOT
@@ -1652,6 +1636,8 @@ const moveFolder = async ({ user, project, device, params, body }) => {
     filters: { _id: folderId, project_id: project._id, deleted_on: 0 },
     data: {
       parent_folder_id: target_folder_id || null,
+      // Only write folder_name when the auto-suffix actually changed it.
+      ...(resolvedName !== folder.folder_name ? { folder_name: resolvedName } : {}),
       updated_by: user._id,
       updated_on: Date.now(),
     },
