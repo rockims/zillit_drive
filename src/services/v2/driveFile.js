@@ -12,6 +12,7 @@ import DriveFolderRepository from '../../repositories/v2/driveFolder.js';
 import DriveAccessService from './driveAccess.js';
 import DriveFileAccessService from './driveFileAccess.js';
 import DriveActivityService from './driveActivity.js';
+import DriveNameResolver from './driveNameResolver.js';
 import DriveNotificationReceivers from './driveNotificationReceivers.js';
 import socketClient, { buildUserRooms } from '../../config/socketClient.js';
 
@@ -230,8 +231,6 @@ const _assertRootFileWriteAccess = async ({ user, file, project }) => {
 };
 
 const createFile = async ({ user, project, device, body }) => {
-  const normalizedFileName = body.file_name.trim().toLowerCase();
-
   let parentFolder = null;
   if (body.folder_id) {
     parentFolder = await _getFolderById({
@@ -251,28 +250,17 @@ const createFile = async ({ user, project, device, body }) => {
     });
   }
 
-  // ZL-18867: Drive is a Private Drive — duplicate name check must be scoped to
-  // the user's own files, not the entire project. Without created_by here,
-  // User B couldn't upload a file named "report.pdf" if User A already had one.
-  const duplicateFilters = {
-    project_id: project._id,
-    folder_id: body.folder_id || null,
-    created_by: user._id,
-    deleted_on: 0,
-  };
-
-  const existingFiles = await DriveFileRepository.getFiles({
-    filters: duplicateFilters,
-    sort: { _id: 1 },
+  // Never block on duplicate — auto-suffix " (N)" within the user's own
+  // namespace (Private Drive, ZL-18867). Cross-user collisions (e.g. a
+  // file shared into the user's view) don't factor in. body.file_name is
+  // overwritten with the resolved name so everything downstream (record,
+  // extension, attachments) uses the same single source of truth.
+  body.file_name = await DriveNameResolver.resolveAvailableFileName({
+    fileName: body.file_name,
+    projectId: project._id,
+    folderId: body.folder_id,
+    createdBy: user._id,
   });
-
-  const duplicateFile = existingFiles.find(
-    (file) => file.file_name.trim().toLowerCase() === normalizedFileName
-  );
-
-  if (duplicateFile) {
-    throw new BadRequest('duplicate_file_name');
-  }
 
   const fileExtension = body.file_name.includes('.')
     ? body.file_name.split('.').pop().toLowerCase()
@@ -1024,33 +1012,26 @@ const moveFile = async ({ user, project, device, params, body }) => {
     });
   }
 
-  // ZL-18867: scope duplicate check to the user's own files (Private Drive).
-  // A move is between folders the user owns, so user._id is the right scope.
-  const duplicateFilters = {
-    project_id: project._id,
-    folder_id: target_folder_id || null,
-    created_by: user._id,
-    deleted_on: 0,
-    _id: { $ne: fileId },
-  };
-
-  const sameFolderFiles = await DriveFileRepository.getFiles({
-    filters: duplicateFilters,
-    sort: { _id: 1 },
+  // Never block the move on a name collision — auto-suffix " (N)" in the
+  // target folder within the user's own namespace (Private Drive,
+  // ZL-18867). Excludes the file being moved so a no-op move doesn't
+  // suffix against itself. resolvedName === file.file_name when the
+  // target had no collision.
+  const resolvedName = await DriveNameResolver.resolveAvailableFileName({
+    fileName: file.file_name,
+    projectId: project._id,
+    folderId: target_folder_id,
+    createdBy: user._id,
+    excludeId: fileId,
   });
-
-  const duplicateFile = sameFolderFiles.find(
-    (existingFile) => existingFile.file_name.trim().toLowerCase() === file.file_name.trim().toLowerCase()
-  );
-
-  if (duplicateFile) {
-    throw new BadRequest('duplicate_file_name_in_target_folder');
-  }
 
   const movedFile = await DriveFileRepository.updateFileDocument({
     filters,
     data: {
       folder_id: target_folder_id || null,
+      // Only write file_name when it actually changed, so an unchanged
+      // move doesn't dirty the field / bump nothing.
+      ...(resolvedName !== file.file_name ? { file_name: resolvedName } : {}),
       updated_by: user._id,
       updated_on: Date.now(),
     },
