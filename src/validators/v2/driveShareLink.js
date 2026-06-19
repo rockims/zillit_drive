@@ -58,6 +58,47 @@ const createShareLink = Joi.object({
   message: Joi.string().max(2000).allow('').optional(),
 });
 
+// Bulk variant — N file_ids in the body (instead of one fileId in the
+// path) and ONE consolidated email per recipient covering all the files.
+// Same per-link options as createShareLink (permission / expiry /
+// max_views / message / recipients), just multiplexed.
+const bulkCreateShareLinks = Joi.object({
+  file_ids: Joi.array()
+    .items(Joi.objectId().required())
+    .min(1)
+    .max(100)
+    .required()
+    .error((err) => { err[0].message = 'file_ids_validation'; return err; }),
+
+  recipients: Joi.array()
+    .items(
+      Joi.object({
+        email: Joi.string().email().required().error((err) => {
+          err[0].message = 'recipient_email_validation';
+          return err;
+        }),
+      }),
+    )
+    .max(50)
+    .optional()
+    .error((err) => { err[0].message = 'recipients_validation'; return err; }),
+
+  permission: Joi.string()
+    .valid('view', 'view_download')
+    .default('view'),
+
+  expires_in_ms: Joi.number()
+    .integer()
+    .min(0)
+    .max(365 * 24 * 60 * 60 * 1000)
+    .default(7 * 24 * 60 * 60 * 1000),
+
+  max_views: Joi.number().integer().min(0).max(10000).default(0),
+
+  message: Joi.string().max(2000).allow('').optional(),
+});
+
 export default {
   createShareLink,
+  bulkCreateShareLinks,
 };
