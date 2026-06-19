@@ -18,6 +18,7 @@ import DriveFolderRepository from '../../repositories/v2/driveFolder.js';
 import DriveFileAccessRepository from '../../repositories/v2/driveFileAccess.js';
 import DriveAccessService from './driveAccess.js';
 import DriveFileAccessService from './driveFileAccess.js';
+import DriveNameResolver from './driveNameResolver.js';
 import DriveNotificationReceivers from './driveNotificationReceivers.js';
 import DriveUploadSession from 'zillit-libs/mongo-models-v2/DriveUploadSession';
 import DriveThumbnailService from './driveThumbnail.js';
@@ -123,22 +124,27 @@ const initiateUpload = async ({ user, project, device, body }) => {
     });
   }
 
-  // Check duplicate file name in target folder
-  const existingFile = await DriveFileRepository.getFile({
-    filters: {
-      project_id: project._id,
-      folder_id: folder_id || null,
-      deleted_on: 0,
-      file_name: { $regex: new RegExp(`^${file_name.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') },
-    },
+  // Resolve a non-colliding name in the user's own namespace. Never
+  // throws duplicate_file_name — appends " (N)" when needed. Cross-user
+  // collisions (e.g. a file shared with you that bears the same name)
+  // do NOT factor in, so the My Drive vs Shared-with-me split stays
+  // a true private namespace. See resolveAvailableFileName for the
+  // suffix rules and edge cases. The remainder of this handler uses
+  // `resolvedFileName` for everything (S3 key, metadata, session
+  // record, response) so a single source of truth flows through to
+  // completeUpload.
+  const resolvedFileName = await DriveNameResolver.resolveAvailableFileName({
+    fileName: file_name,
+    projectId: project._id,
+    folderId: folder_id,
+    createdBy: user._id,
   });
-  if (existingFile) throw new BadRequest('duplicate_file_name');
 
   // Compute chunks
   const chunkSize = computeChunkSize(file_size_bytes);
   const totalParts = Math.ceil(file_size_bytes / chunkSize);
-  const resolvedMime = getMimeType(file_name, mime_type);
-  const s3Key = generateS3Key(project._id, folder_id, file_name);
+  const resolvedMime = getMimeType(resolvedFileName, mime_type);
+  const s3Key = generateS3Key(project._id, folder_id, resolvedFileName);
 
   // Create S3 multipart upload
   const createCmd = new CreateMultipartUploadCommand({
@@ -148,7 +154,7 @@ const initiateUpload = async ({ user, project, device, body }) => {
     Metadata: {
       project_id: toIdString(project._id),
       user_id: toIdString(user._id),
-      original_name: encodeURIComponent(file_name),
+      original_name: encodeURIComponent(resolvedFileName),
     },
   });
   const { UploadId: s3UploadId } = await s3.send(createCmd);
@@ -174,7 +180,7 @@ const initiateUpload = async ({ user, project, device, body }) => {
     project_id: project._id,
     folder_id: folder_id || null,
     user_id: user._id,
-    file_name,
+    file_name: resolvedFileName,
     file_size_bytes,
     mime_type: resolvedMime,
     s3_key: s3Key,
@@ -201,6 +207,12 @@ const initiateUpload = async ({ user, project, device, body }) => {
     chunk_size: chunkSize,
     total_parts: totalParts,
     expires_at: expiresAt,
+    // The resolved name — equals body.file_name unless the user already
+    // had a file with that name in this folder, in which case it's been
+    // auto-suffixed. FE should display THIS in any "Uploading <name>"
+    // toast so the user sees the actual saved name.
+    file_name: resolvedFileName,
+    file_name_changed: resolvedFileName !== String(file_name || '').trim(),
   };
 };
 
