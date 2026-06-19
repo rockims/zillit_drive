@@ -22,6 +22,24 @@ const DriveShareLinkController = {
     }
   },
 
+  async bulkCreateShareLinks(req, res) {
+    try {
+      // Same moduledata forwarding as the single-file create — needed so
+      // the service can dispatch the consolidated invite email via emailapi.
+      const { moduledata } = req.headers || {};
+      const data = await DriveShareLinkService.bulkCreateShareLinks({
+        user: req.user,
+        project: req.project,
+        body: req.body,
+        moduledata,
+      });
+      return ApiResponse.handleResponse(res, { message: 'bulk_share_links_created', data });
+    } catch (error) {
+      console.log('[bulk_share_links_create_failed]:', error.message);
+      return ApiResponse.handleError(res, error);
+    }
+  },
+
   async listShareLinks(req, res) {
     try {
       const data = await DriveShareLinkService.listShareLinks({

@@ -381,6 +381,269 @@ const createShareLink = async ({ user, project, params, body, moduledata }) => {
   };
 };
 
+/* ───────────── Bulk: N files → 1 consolidated email per recipient ─────────── */
+
+// HTML body for the consolidated email: one "Open file" row per file,
+// each row's URL uses THIS recipient's per-file recipient_token (so
+// the forensic watermark on playback stays per-recipient even when the
+// same recipient receives many files in one go).
+const buildConsolidatedEmailHtml = ({
+  fileRows, sender, message, expires_on,
+}) => {
+  const senderName = sender?.full_name || sender?.first_name || sender?.email || 'A Zillit user';
+  const count = fileRows.length;
+  const expiryText = expires_on > 0
+    ? `Links expire on ${new Date(expires_on).toUTCString()}.`
+    : 'Links do not expire.';
+  const messageBlock = message
+    ? `<p style="margin:16px 0;color:#333;">${escapeHtml(message)}</p>`
+    : '';
+
+  const rowsHtml = fileRows.map((row) => `
+    <div style="border:1px solid #eee;border-radius:8px;padding:12px 16px;margin:10px 0;background:#fafafa;">
+      <div style="font-size:14px;font-weight:600;color:#111;margin-bottom:6px;">${escapeHtml(row.file_name)}</div>
+      <div style="font-size:12px;color:#666;margin-bottom:10px;">
+        Permission: ${row.permission === 'view' ? 'View only' : 'View &amp; download'}
+      </div>
+      <a href="${row.url}" style="display:inline-block;background:#f99300;color:#fff;text-decoration:none;padding:8px 16px;border-radius:6px;font-weight:600;font-size:13px;">Open file</a>
+    </div>`).join('');
+
+  return `
+<!doctype html>
+<html><body style="font-family:-apple-system,Segoe UI,Roboto,sans-serif;color:#111;max-width:640px;margin:0 auto;padding:24px;">
+  <h2 style="margin:0 0 16px;">${escapeHtml(senderName)} shared ${count} file${count === 1 ? '' : 's'} with you</h2>
+  <p style="margin:0 0 8px;color:#555;">
+    via <strong>Zillit Drive</strong>
+  </p>
+  ${messageBlock}
+  <div style="margin:16px 0;">
+    ${rowsHtml}
+  </div>
+  <p style="margin:16px 0;font-size:12px;color:#666;">
+    ${expiryText}<br>
+    These links are for your use only. Your viewing activity is logged.
+  </p>
+</body></html>`;
+};
+
+/**
+ * Send one consolidated share email to a recipient containing rows for
+ * ALL the files they were just shared. Mirrors sendShareEmailViaDistribution
+ * (same auth, same headers, same emailapi route) but the body lists many
+ * files instead of one. Treats emailapi's `email_sent_failed` 400 as a
+ * successful send — verified false-negative in this codebase (see PR #94's
+ * file-request fix; SES double-send in PR #83 proved delivery).
+ */
+const sendConsolidatedShareEmail = async ({
+  recipientEmail, fileRows, sender, moduledata, message, expires_on,
+}) => {
+  if (!sender?.mail_box_detail?.email_address || !sender?.mail_box_detail?.id) {
+    return { email: recipientEmail, sent: false, reason: 'sender_has_no_mailbox' };
+  }
+  if (!moduledata) {
+    return { email: recipientEmail, sent: false, reason: 'moduledata_required' };
+  }
+  if (!Array.isArray(fileRows) || fileRows.length === 0) {
+    return { email: recipientEmail, sent: false, reason: 'no_files_to_send' };
+  }
+
+  const senderLabel = sender?.full_name || sender?.email || 'A Zillit user';
+  const payload = {
+    from: `${sender.mail_box_detail.name || sender.full_name || ''} <${sender.mail_box_detail.email_address}>`.trim(),
+    to: [{ email_address: recipientEmail }],
+    cc: [],
+    bcc: [],
+    subject: `${senderLabel} shared ${fileRows.length} file${fileRows.length === 1 ? '' : 's'} with you`,
+    body: buildConsolidatedEmailHtml({
+      fileRows, sender, message, expires_on,
+    }),
+    storage_folder: 'Distributed Mails',
+  };
+
+  const bodyhash = new EncryptDecryptUtil().hashWithSHA256(
+    JSON.stringify({ payload, moduledata }),
+  );
+
+  try {
+    await axios.request({
+      method: 'post',
+      maxBodyLength: Infinity,
+      url: `${getUrls('CNC_BASE_URL')}/v2/imap-send`,
+      headers: { moduledata, bodyhash },
+      data: payload,
+    });
+    return { email: recipientEmail, sent: true };
+  } catch (err) {
+    const apiError = err?.response?.data?.message || err?.message || String(err);
+    // Same emailapi false-negative we hit in PR #94: a 400 `email_sent_failed`
+    // is returned AFTER MailSlurp has already accepted the message. Treat
+    // ONLY this specific response as a successful send.
+    if (apiError === 'email_sent_failed') {
+      return { email: recipientEmail, sent: true };
+    }
+    return { email: recipientEmail, sent: false, reason: apiError };
+  }
+};
+
+/**
+ * Bulk create share links across many files in one call, then send ONE
+ * consolidated email per recipient containing links to all the files
+ * that succeeded (replaces the FE having to fire N single-file creates
+ * + receive N emails per recipient — the Stone Soup PDF workflow,
+ * native).
+ *
+ * Per-recipient tokens are still generated per-file so forensic
+ * watermarking stays attributable. Per-file failures (file missing,
+ * no edit permission, etc.) don't abort the batch — they're recorded
+ * in `errors` and excluded from the email.
+ */
+const bulkCreateShareLinks = async ({ user, project, body, moduledata }) => {
+  const {
+    file_ids = [],
+    permission = 'view',
+    expires_in_ms,
+    max_views = 0,
+    message = '',
+    recipients = [],
+  } = body || {};
+
+  if (!Array.isArray(file_ids) || file_ids.length === 0) {
+    throw new BadRequest('file_ids_required');
+  }
+  if (file_ids.length > 100) {
+    throw new BadRequest('max_100_files_per_bulk_operation');
+  }
+  if (!Array.isArray(recipients)) {
+    throw new BadRequest('recipients_required');
+  }
+  if (recipients.length > 50) {
+    throw new BadRequest('max_50_recipients_per_bulk_share_link');
+  }
+
+  const now = Date.now();
+  const ttl = typeof expires_in_ms === 'number'
+    ? expires_in_ms
+    : 7 * 24 * 60 * 60 * 1000;
+  const expires_on = ttl === 0 ? 0 : now + ttl;
+
+  // Batched file lookup — one round-trip for all ids.
+  const files = await DriveFileRepository.getFiles({
+    filters: {
+      _id: { $in: file_ids },
+      project_id: project._id,
+      deleted_on: 0,
+    },
+  });
+  const fileById = new Map(files.map((f) => [String(f._id), f]));
+
+  const created = [];
+  const errors = [];
+
+  // Per-file: assert edit access, create link record with per-recipient
+  // tokens. Sequential here (not Promise.all) so a token-generation
+  // collision under load doesn't race — N≤100 files, each is a small
+  // create.
+  for (const fileId of file_ids) {
+    try {
+      const file = fileById.get(String(fileId));
+      if (!file) {
+        errors.push({ file_id: fileId, error: 'file_not_found' });
+        continue;
+      }
+      await DriveFileAccessService.assertFileAccess({
+        user, project, file, permission: 'edit',
+      });
+
+      const linkRecipients = recipients.map((r) => ({
+        email: String(r.email || '').toLowerCase().trim(),
+        recipient_token: generateToken(),
+        sent_on: now,
+      }));
+
+      const link = await DriveShareLinkRepository.create({
+        data: {
+          project_id: project._id,
+          item_type: 'file',
+          item_id: file._id,
+          token: generateToken(),
+          permission: ['view', 'view_download'].includes(permission) ? permission : 'view',
+          created_by: user._id,
+          created_on: now,
+          updated_on: now,
+          expires_on,
+          max_views: max_views || 0,
+          view_count: 0,
+          revoked: false,
+          recipients: linkRecipients,
+          message: message || '',
+        },
+      });
+
+      created.push({
+        file_id: toIdString(file._id),
+        file_name: file.file_name,
+        link_id: toIdString(link._id),
+        token: link.token,
+        url: `${PUBLIC_BASE_URL}/share/${link.token}`,
+        permission: link.permission,
+        expires_on: link.expires_on,
+        recipients: link.recipients.map((r) => ({
+          email: r.email,
+          recipient_token: r.recipient_token,
+          url: `${PUBLIC_BASE_URL}/share/${link.token}?r=${r.recipient_token}`,
+        })),
+      });
+    } catch (err) {
+      errors.push({ file_id: fileId, error: err?.message || 'create_failed' });
+    }
+  }
+
+  // Send ONE consolidated email per recipient containing all the files
+  // that succeeded for them. Per-recipient URL uses that recipient's
+  // per-file token for watermark attribution.
+  const email_results = [];
+  if (recipients.length > 0 && created.length > 0) {
+    const rowsByEmail = new Map();
+    for (const linkInfo of created) {
+      for (const r of linkInfo.recipients) {
+        if (!rowsByEmail.has(r.email)) rowsByEmail.set(r.email, []);
+        rowsByEmail.get(r.email).push({
+          file_id: linkInfo.file_id,
+          file_name: linkInfo.file_name,
+          permission: linkInfo.permission,
+          url: r.url,
+        });
+      }
+    }
+
+    // Sequential to avoid hammering emailapi with N concurrent sends
+    // when the recipient list is large (50 cap). Per-recipient failures
+    // are recorded, not thrown.
+    for (const [email, fileRows] of rowsByEmail.entries()) {
+      // eslint-disable-next-line no-await-in-loop
+      const result = await sendConsolidatedShareEmail({
+        recipientEmail: email,
+        fileRows,
+        sender: user,
+        moduledata,
+        message,
+        expires_on,
+      });
+      email_results.push(result);
+      // eslint-disable-next-line no-console
+      console.info('[bulk_share_link_email_result]:', result);
+    }
+  }
+
+  return {
+    created_count: created.length,
+    failed_count: errors.length,
+    files: created,
+    errors,
+    email_results,
+  };
+};
+
 const listShareLinks = async ({ user, project, params }) => {
   const { fileId } = params;
 
@@ -771,6 +1034,7 @@ const recordView = async ({ params, query, req }) => {
 
 export default {
   createShareLink,
+  bulkCreateShareLinks,
   listShareLinks,
   revokeShareLink,
   getViewerData,
