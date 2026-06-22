@@ -34,7 +34,14 @@ const DRIVE_UNIT_FILE = 'drive_file_label';
 
 /* ───────────── S3 Client ───────────── */
 
-const S3_DEFAULT_REGION = process.env.AWS_REGION || 'ap-south-1';
+// Prefer S3_REGION (bucket's real region, ap-south-1 on prod) over the
+// SDK-global AWS_REGION (us-east-1 on prod). See driveFileRequest.js for
+// the full rationale — a us-east-1 client against the ap-south-1 bucket
+// 301s on direct server-side ops.
+const S3_DEFAULT_REGION = process.env.S3_REGION
+  || process.env.AWS_S3_BUCKET_REGION
+  || process.env.AWS_REGION
+  || 'ap-south-1';
 const S3_BUCKET = process.env.S3_BUCKET || process.env.AWS_S3_BUCKET || 'zillit-bucket-mumbai-dev';
 const S3_REGION = S3_DEFAULT_REGION;
 
