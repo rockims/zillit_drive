@@ -1650,15 +1650,25 @@ const moveFolder = async ({ user, project, device, params, body }) => {
   // 9. Refresh descendant folder paths
   await _refreshDescendantPaths({ project, rootFolder: updatedFolder, user });
 
-  // 9.5 Reconcile inherited access records from the new parent
+  // 9.5 Reconcile inherited access records from the new parent.
+  // ZL-20162: skipAccessCheck — the move already authorized the actor (editor
+  // on the target); inheritFolderAccessToDescendants is otherwise owner-gated
+  // (it doubles as a standalone owner-only endpoint), which re-blocked an
+  // editor's valid move AFTER the parent mutation, so the move persisted then
+  // 403'd. Also wrapped best-effort like the notify/re-anchor blocks below —
+  // the move already succeeded, so a reconcile hiccup must not fail the request.
   if (target_folder_id) {
-    const targetFolder = await DriveFolderRepository.getFolder({
-      filters: { _id: target_folder_id, project_id: project._id, deleted_on: 0 },
-    });
-    if (targetFolder) {
-      await DriveAccessService.inheritFolderAccessToDescendants({
-        user, project, folder: targetFolder,
+    try {
+      const targetFolder = await DriveFolderRepository.getFolder({
+        filters: { _id: target_folder_id, project_id: project._id, deleted_on: 0 },
       });
+      if (targetFolder) {
+        await DriveAccessService.inheritFolderAccessToDescendants({
+          user, project, folder: targetFolder, skipAccessCheck: true,
+        });
+      }
+    } catch (err) {
+      console.error('[moveFolder_inherit_failed]:', err.message);
     }
   }
 
