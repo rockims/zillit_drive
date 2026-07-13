@@ -725,13 +725,27 @@ const setFolderAccessList = async ({
   });
 };
 
-const inheritFolderAccessToDescendants = async ({ user, project, folder }) => {
-  await assertFolderAccess({
-    user,
-    project,
-    folder,
-    minRole: 'owner',
-  });
+const inheritFolderAccessToDescendants = async ({
+  user, project, folder, skipAccessCheck = false,
+}) => {
+  // ZL-20162: the standalone POST /:folderId/access/inherit endpoint is
+  // owner-only, so this asserts owner by default. But moveFolder calls this
+  // internally AFTER it has already authorized the actor (editor on the
+  // target). Re-asserting owner there re-blocked an editor's already-valid
+  // move — and, because the throw landed AFTER the parent_folder_id mutation,
+  // the move persisted while the request 403'd. moveFolder passes
+  // skipAccessCheck:true to bypass this redundant gate; every other caller
+  // keeps the owner check. This copies only the TARGET's existing ACL down to
+  // its descendants — it grants the actor nothing new, so it's not an
+  // escalation.
+  if (!skipAccessCheck) {
+    await assertFolderAccess({
+      user,
+      project,
+      folder,
+      minRole: 'owner',
+    });
+  }
 
   const sourceAccesses = await DriveFolderAccessRepository.getAccesses({
     filters: {
