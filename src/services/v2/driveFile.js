@@ -676,17 +676,23 @@ const getFile = async ({ user, project, params }) => {
       throw new BadRequest('folder_not_found');
     }
 
-    await DriveAccessService.assertFolderAccess({
-      user,
-      project,
-      folder,
-      minRole: 'viewer',
-    });
+    // ZL-20194: do NOT hard-require folder access here. A file can be shared
+    // directly with a user who has NO access to its parent folder (share the
+    // file, not the folder). The previous unconditional
+    // assertFolderAccess(viewer) rejected such users at the folder gate before
+    // their valid file-level share was ever evaluated — so previewing/opening a
+    // file that was shared with them 403'd (web then bounced to the project
+    // list). The authoritative gate is assertFileAccess below, which resolves
+    // explicit file-level access first and only falls back to folder role, so:
+    // folder-viewers still pass, file-level sharees now pass, and users with no
+    // access are still rejected. Mirrors the root-file path
+    // (_assertRootFileReadAccess), which already honors file-level shares.
   } else {
     await _assertRootFileReadAccess({ user, file, project });
   }
 
-  // Enforce file-level permissions (falls back to folder role if no explicit record)
+  // Authoritative read gate: resolves explicit file-level access first, then
+  // falls back to the folder role (see resolveFilePermission).
   await DriveFileAccessService.assertFileAccess({ user, project, file, permission: 'view' });
 
   // Attach current user's permissions
