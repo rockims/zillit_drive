@@ -150,6 +150,40 @@ const resolveWatermark = ({ template, recipient }) => {
 
 /* ───────────── Email send ───────────── */
 
+const DISTRIBUTED_FOLDER = 'Distributed Mails';
+
+/**
+ * Make sure the sender's mailbox has the "Distributed Mails" IMAP folder
+ * before we send with `storage_folder` pointing at it — same guard the
+ * document-distribution service runs before its sends. Lists the folders
+ * via /v2/imap-folders and creates the folder only when missing.
+ */
+const ensureDistributedFolder = async (moduledata) => {
+  const baseUrl = getUrls('CNC_BASE_URL');
+  const encryptor = new EncryptDecryptUtil();
+
+  const listHash = encryptor.hashWithSHA256(JSON.stringify({ payload: '', moduledata }));
+  const { data: folderResponse } = await axios.request({
+    method: 'get',
+    maxBodyLength: Infinity,
+    url: `${baseUrl}/v2/imap-folders`,
+    headers: { moduledata, bodyhash: listHash },
+  });
+
+  const exists = folderResponse?.data?.some((f) => f.folder_name === DISTRIBUTED_FOLDER);
+  if (exists) return;
+
+  const payload = { folder_name: DISTRIBUTED_FOLDER };
+  const createHash = encryptor.hashWithSHA256(JSON.stringify({ payload, moduledata }));
+  await axios.request({
+    method: 'post',
+    maxBodyLength: Infinity,
+    url: `${baseUrl}/v2/imap-folders`,
+    headers: { moduledata, bodyhash: createHash },
+    data: payload,
+  });
+};
+
 const buildEmailHtml = ({ link, recipient, file, sender }) => {
   const url = `${PUBLIC_BASE_URL}/share/${link.token}?r=${recipient.recipient_token}`;
   const senderName = sender?.full_name || sender?.first_name || sender?.email || 'A Zillit user';
@@ -221,6 +255,15 @@ const sendShareEmailViaDistribution = async ({
     throw new Error('moduledata_required_for_imap_send');
   }
 
+  // Non-fatal: a folder-listing hiccup shouldn't block the share email —
+  // imap-send still delivers, worst case the copy isn't filed in the folder.
+  try {
+    await ensureDistributedFolder(moduledata);
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.error(`[drive-share] ensure Distributed Mails folder failed: ${err.message || err}`);
+  }
+
   const payload = {
     from: `${sender.mail_box_detail.name || sender.full_name || ''} <${sender.mail_box_detail.email_address}>`.trim(),
     to: [{ email_address: recipient.email }],
@@ -230,7 +273,7 @@ const sendShareEmailViaDistribution = async ({
     body: buildEmailHtml({
       link, recipient, file, sender,
     }),
-    storage_folder: 'Distributed Mails',
+    storage_folder: DISTRIBUTED_FOLDER,
   };
 
   const bodyhash = new EncryptDecryptUtil().hashWithSHA256(
@@ -454,6 +497,15 @@ const sendConsolidatedShareEmail = async ({
     return { email: recipientEmail, sent: false, reason: 'no_files_to_send' };
   }
 
+  // Non-fatal: a folder-listing hiccup shouldn't block the share email —
+  // imap-send still delivers, worst case the copy isn't filed in the folder.
+  try {
+    await ensureDistributedFolder(moduledata);
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.error(`[drive-share] ensure Distributed Mails folder failed: ${err.message || err}`);
+  }
+
   const senderLabel = sender?.full_name || sender?.email || 'A Zillit user';
   const payload = {
     from: `${sender.mail_box_detail.name || sender.full_name || ''} <${sender.mail_box_detail.email_address}>`.trim(),
@@ -464,7 +516,7 @@ const sendConsolidatedShareEmail = async ({
     body: buildConsolidatedEmailHtml({
       fileRows, sender, message, expires_on,
     }),
-    storage_folder: 'Distributed Mails',
+    storage_folder: DISTRIBUTED_FOLDER,
   };
 
   const bodyhash = new EncryptDecryptUtil().hashWithSHA256(
