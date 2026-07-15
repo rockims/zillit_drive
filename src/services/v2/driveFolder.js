@@ -1223,6 +1223,57 @@ const updateFolder = async ({ user, project, device, params, body }) => {
   const updateOwnerId = parentFolderForUpdate
     ? parentFolderForUpdate.created_by
     : updatedFolder.created_by;
+
+  // ZL-20178: coalesce repeated edits. Each edit fires a fresh
+  // drive_folder_updated save; without clearing the previous one, re-editing
+  // the SAME folder stacks unread badges on receivers (the folders-section
+  // count climbed to N for a single folder). Before firing the fresh badge,
+  // silent-mark each receiver's PRIOR unread drive_folder_updated for THIS
+  // folder as read and emit notification:silent with read_notification_ids so
+  // clients drop the stale badge — leaving exactly one unread edit badge per
+  // receiver per folder. Same silent-mark-then-fresh pattern as the share
+  // (driveAccess), move and delete flows. Best-effort: never fail the update.
+  if (folderUpdateReceiverIds.length > 0) {
+    try {
+      const priorUpdateFilters = {
+        project_id: project._id,
+        receiver: { $in: folderUpdateReceiverIds },
+        reference_id: toIdString(updatedFolder._id),
+        action: 'drive_folder_updated',
+        message_read: false,
+      };
+      const priorReadIds = await NotificationRepository.getNotificationIDs({
+        filters: priorUpdateFilters,
+        field: 'notification_uuid',
+      });
+      if (priorReadIds.length > 0) {
+        await NotificationRepository.updateNotification({
+          filters: priorUpdateFilters,
+          data: { message_read: true },
+        });
+        await DriveNotificationReceivers.notifyAllTabRouted({
+          project,
+          actor: user,
+          receiverIds: folderUpdateReceiverIds,
+          parentFolderOwnerId: updateOwnerId,
+          folderId: updatedFolder.parent_folder_id,
+          itemId: updatedFolder._id,
+          unit: DRIVE_UNIT_FOLDER,
+          action: 'drive_folder_updated',
+          referenceData: {
+            folder_id: toIdString(updatedFolder._id),
+            folder_name: updatedFolder.folder_name,
+            read_notification_ids: priorReadIds.filter(Boolean),
+          },
+          socketClient,
+          options: { save: false, silent: true },
+        });
+      }
+    } catch (err) {
+      console.error('[updateFolder_dedup_failed]:', err.message);
+    }
+  }
+
   await DriveNotificationReceivers.notifyAllTabRouted({
     project,
     actor: user,
@@ -1650,15 +1701,25 @@ const moveFolder = async ({ user, project, device, params, body }) => {
   // 9. Refresh descendant folder paths
   await _refreshDescendantPaths({ project, rootFolder: updatedFolder, user });
 
-  // 9.5 Reconcile inherited access records from the new parent
+  // 9.5 Reconcile inherited access records from the new parent.
+  // ZL-20162: skipAccessCheck — the move already authorized the actor (editor
+  // on the target); inheritFolderAccessToDescendants is otherwise owner-gated
+  // (it doubles as a standalone owner-only endpoint), which re-blocked an
+  // editor's valid move AFTER the parent mutation, so the move persisted then
+  // 403'd. Also wrapped best-effort like the notify/re-anchor blocks below —
+  // the move already succeeded, so a reconcile hiccup must not fail the request.
   if (target_folder_id) {
-    const targetFolder = await DriveFolderRepository.getFolder({
-      filters: { _id: target_folder_id, project_id: project._id, deleted_on: 0 },
-    });
-    if (targetFolder) {
-      await DriveAccessService.inheritFolderAccessToDescendants({
-        user, project, folder: targetFolder,
+    try {
+      const targetFolder = await DriveFolderRepository.getFolder({
+        filters: { _id: target_folder_id, project_id: project._id, deleted_on: 0 },
       });
+      if (targetFolder) {
+        await DriveAccessService.inheritFolderAccessToDescendants({
+          user, project, folder: targetFolder, skipAccessCheck: true,
+        });
+      }
+    } catch (err) {
+      console.error('[moveFolder_inherit_failed]:', err.message);
     }
   }
 
