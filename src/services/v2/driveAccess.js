@@ -634,7 +634,11 @@ const setFolderAccessList = async ({
             project,
             actor: user,
             receiverIds: receiverIdsToRefresh,
-            parentFolderOwnerId: null, // all receivers → Shared with Me
+            // ZL-18885: the folder OWNER (created_by) is routed to My Drive;
+            // genuine new sharees fall through to Shared With Me. Previously
+            // null sent EVERYONE — including the owner (e.g. when the FE
+            // re-sends the full access list) — to Shared With Me.
+            parentFolderOwnerId: toIdString(folder.created_by),
             folderId: folder._id,
             itemId: folder._id,
             unit: DRIVE_UNIT_FOLDER,
@@ -653,7 +657,8 @@ const setFolderAccessList = async ({
           project,
           actor: user,
           receiverIds: receiverIdsToRefresh,
-          parentFolderOwnerId: null, // all receivers → Shared with Me
+          // ZL-18885: owner → My Drive; genuine new sharees → Shared With Me.
+          parentFolderOwnerId: toIdString(folder.created_by),
           folderId: folder._id,
           itemId: folder._id,
           unit: DRIVE_UNIT_FOLDER,
