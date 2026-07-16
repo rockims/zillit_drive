@@ -365,10 +365,29 @@ const listAccessibleFolderIds = async ({ user, project }) => {
   const folderMap = new Map();
   allFolders.forEach((f) => folderMap.set(toIdString(f._id), toIdString(f.parent_folder_id)));
 
+  // ZL-18885: which folders the user can genuinely reach (owns or was directly
+  // granted). Used to bound the ancestor walk for OWNED seeds so a folder that
+  // someone else relocated into their private folder does not leak that
+  // inaccessible parent into the user's listing (it would show in a tab and
+  // 403 on open). File-access / directly-granted seeds keep the original
+  // full-path walk so navigation to a shared file's container still works.
+  const ownedSet = new Set(ownFolders.map((f) => toIdString(f._id)).filter(Boolean));
+  const navAccessibleSet = new Set([
+    ...ownedSet,
+    ...directIds.map((id) => toIdString(id)).filter(Boolean),
+  ]);
+
   // Walk up from each seed folder to root, adding ancestors
   for (const seedId of seedIds) {
+    // For a folder the user OWNS, only surface ancestors they can actually
+    // access — stop at the first foreign parent instead of exposing it. All of
+    // an owner's accessible ancestors are already seeds (owned/granted), so this
+    // never drops a reachable folder; it only re-anchors an orphaned folder to
+    // the user's root. Non-owned seeds keep the unconditional walk (unchanged).
+    const restrictToAccessible = ownedSet.has(seedId);
     let current = folderMap.get(seedId);
     while (current && !allIds.has(current) && !ancestorIds.has(current)) {
+      if (restrictToAccessible && !navAccessibleSet.has(current)) break;
       ancestorIds.add(current);
       current = folderMap.get(current);
     }
