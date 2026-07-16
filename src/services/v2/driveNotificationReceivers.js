@@ -208,20 +208,28 @@ const getMoveReceivers = async ({ project, actorId, sourceFolderId, targetFolder
  * Owners go to the "My Drive" tab; sharees go to "Shared with Me".
  *
  * @param {Array<string>} receiverIds — full receiver list (already excludes actor)
- * @param {string|null} ownerId — the owning user_id (folder.created_by for nested
- *   items, the folder.created_by for folder events themselves, or null for root
- *   files where every receiver is a sharee).
+ * @param {string|Array<string>|null} ownerIdOrIds — the owning user_id(s). A
+ *   single id (folder.created_by for a folder event, the parent owner for a
+ *   nested item), OR an array of ids, OR null when every receiver is a sharee.
+ *   ZL-18885: array support lets one event route MULTIPLE owners to My Drive —
+ *   e.g. a move routes both the moved folder's owner and the target folder's
+ *   owner to My Drive, and a share routes the folder owner to My Drive instead
+ *   of Shared With Me — without mis-routing anyone else.
  * @returns {{ owners: string[], sharees: string[] }}
  */
-const splitReceiversByOwnership = (receiverIds = [], ownerId = null) => {
-  if (!ownerId) {
+const splitReceiversByOwnership = (receiverIds = [], ownerIdOrIds = null) => {
+  const ownerSet = new Set(
+    (Array.isArray(ownerIdOrIds) ? ownerIdOrIds : [ownerIdOrIds])
+      .map(toIdString)
+      .filter(Boolean),
+  );
+  if (ownerSet.size === 0) {
     return { owners: [], sharees: [...receiverIds] };
   }
-  const ownerStr = toIdString(ownerId);
   const owners = [];
   const sharees = [];
   receiverIds.forEach((rid) => {
-    if (toIdString(rid) === ownerStr) owners.push(rid);
+    if (ownerSet.has(toIdString(rid))) owners.push(rid);
     else sharees.push(rid);
   });
   return { owners, sharees };
