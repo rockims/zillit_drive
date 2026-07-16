@@ -1765,9 +1765,16 @@ const moveFolder = async ({ user, project, device, params, body }) => {
       const targetParent = updatedFolder.parent_folder_id
         ? await _getFolderById({ project, folderId: updatedFolder.parent_folder_id })
         : null;
-      const movedOwnerId = targetParent
-        ? targetParent.created_by
-        : updatedFolder.created_by;
+      // ZL-18885: route BOTH the moved folder's OWNER and the target folder's
+      // owner to My Drive (the moved folder belongs to its owner's drive; the
+      // target belongs to its owner's). Previously only the target parent's
+      // owner got My Drive, so the moved folder's owner (e.g. User A whose
+      // shared folder was moved by an all-rights sharee) wrongly landed in
+      // Shared With Me. Array is de-duped/filtered in splitReceiversByOwnership.
+      const movedOwnerId = [
+        toIdString(updatedFolder.created_by),
+        targetParent ? toIdString(targetParent.created_by) : null,
+      ].filter(Boolean);
 
       // Silent-mark prior unread notifications for THIS folder. Their levels
       // reflect the pre-move ancestry and would otherwise produce stale
@@ -1926,9 +1933,12 @@ const moveFolder = async ({ user, project, device, params, body }) => {
       const targetParent = updatedFolder.parent_folder_id
         ? await _getFolderById({ project, folderId: updatedFolder.parent_folder_id })
         : null;
-      const subtreeOwnerId = targetParent
-        ? targetParent.created_by
-        : updatedFolder.created_by;
+      // ZL-18885: same as the moved-folder OWN block — route both the moved
+      // subtree's owner and the target folder's owner to My Drive.
+      const subtreeOwnerId = [
+        toIdString(updatedFolder.created_by),
+        targetParent ? toIdString(targetParent.created_by) : null,
+      ].filter(Boolean);
 
       const dropByReceiver = new Map();
       priorSubtreeNotifications.forEach((n) => {
