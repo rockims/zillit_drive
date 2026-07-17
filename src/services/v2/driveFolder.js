@@ -1224,73 +1224,59 @@ const updateFolder = async ({ user, project, device, params, body }) => {
     ? parentFolderForUpdate.created_by
     : updatedFolder.created_by;
 
-  // ZL-20178: coalesce repeated edits. Each edit fires a fresh
-  // drive_folder_updated save; without clearing the previous one, re-editing
-  // the SAME folder stacks unread badges on receivers (the folders-section
-  // count climbed to N for a single folder). Before firing the fresh badge,
-  // silent-mark each receiver's PRIOR unread drive_folder_updated for THIS
-  // folder as read and emit notification:silent with read_notification_ids so
-  // clients drop the stale badge — leaving exactly one unread edit badge per
-  // receiver per folder. Same silent-mark-then-fresh pattern as the share
-  // (driveAccess), move and delete flows. Best-effort: never fail the update.
+  // ZL-20178: repeated edits must not STACK edit badges on receivers (the
+  // folders-section count climbed to N for a single edited folder). Only fire a
+  // fresh drive_folder_updated to receivers who do NOT already hold an unread
+  // one for THIS folder — a receiver who still has an unread edit badge keeps it
+  // (count stays 1); one with none (first edit, or who already read the prior
+  // badge) gets a fresh one.
+  //
+  // NOTE: an earlier version silent-marked the prior badge + re-saved a fresh
+  // one, but that relied on clients honoring the notification:silent drop —
+  // web/iOS/Android don't reliably evict on silent, so they kept stacking. This
+  // skip-if-already-unread approach (mirrors the share flow's dedup) coalesces
+  // to a single edit badge WITHOUT depending on client silent handling. Best-
+  // effort: on any lookup error fall back to notifying everyone.
+  let updateReceiverIds = folderUpdateReceiverIds;
   if (folderUpdateReceiverIds.length > 0) {
     try {
-      const priorUpdateFilters = {
-        project_id: project._id,
-        receiver: { $in: folderUpdateReceiverIds },
-        reference_id: toIdString(updatedFolder._id),
-        action: 'drive_folder_updated',
-        message_read: false,
-      };
-      const priorReadIds = await NotificationRepository.getNotificationIDs({
-        filters: priorUpdateFilters,
-        field: 'notification_uuid',
-      });
-      if (priorReadIds.length > 0) {
-        await NotificationRepository.updateNotification({
-          filters: priorUpdateFilters,
-          data: { message_read: true },
-        });
-        await DriveNotificationReceivers.notifyAllTabRouted({
-          project,
-          actor: user,
-          receiverIds: folderUpdateReceiverIds,
-          parentFolderOwnerId: updateOwnerId,
-          folderId: updatedFolder.parent_folder_id,
-          itemId: updatedFolder._id,
-          unit: DRIVE_UNIT_FOLDER,
+      const alreadyUnread = await NotificationRepository.getNotifications({
+        filters: {
+          project_id: project._id,
+          receiver: { $in: folderUpdateReceiverIds },
+          reference_id: toIdString(updatedFolder._id),
           action: 'drive_folder_updated',
-          referenceData: {
-            folder_id: toIdString(updatedFolder._id),
-            folder_name: updatedFolder.folder_name,
-            read_notification_ids: priorReadIds.filter(Boolean),
-          },
-          socketClient,
-          options: { save: false, silent: true },
-        });
-      }
+          message_read: false,
+        },
+      });
+      const alreadyBadged = new Set(alreadyUnread.map((n) => toIdString(n.receiver)));
+      updateReceiverIds = folderUpdateReceiverIds.filter(
+        (id) => !alreadyBadged.has(toIdString(id)),
+      );
     } catch (err) {
       console.error('[updateFolder_dedup_failed]:', err.message);
     }
   }
 
-  await DriveNotificationReceivers.notifyAllTabRouted({
-    project,
-    actor: user,
-    receiverIds: folderUpdateReceiverIds,
-    parentFolderOwnerId: updateOwnerId,
-    folderId: updatedFolder.parent_folder_id,
-    itemId: updatedFolder._id,
-    unit: DRIVE_UNIT_FOLDER,
-    action: 'drive_folder_updated',
-    message: `Folder "${updatedFolder.folder_name}" updated`,
-    referenceData: {
-      folder_id: toIdString(updatedFolder._id),
-      folder_name: updatedFolder.folder_name,
-      parent_folder_id: updatedFolder.parent_folder_id ? toIdString(updatedFolder.parent_folder_id) : null,
-    },
-    socketClient,
-  });
+  if (updateReceiverIds.length > 0) {
+    await DriveNotificationReceivers.notifyAllTabRouted({
+      project,
+      actor: user,
+      receiverIds: updateReceiverIds,
+      parentFolderOwnerId: updateOwnerId,
+      folderId: updatedFolder.parent_folder_id,
+      itemId: updatedFolder._id,
+      unit: DRIVE_UNIT_FOLDER,
+      action: 'drive_folder_updated',
+      message: `Folder "${updatedFolder.folder_name}" updated`,
+      referenceData: {
+        folder_id: toIdString(updatedFolder._id),
+        folder_name: updatedFolder.folder_name,
+        parent_folder_id: updatedFolder.parent_folder_id ? toIdString(updatedFolder.parent_folder_id) : null,
+      },
+      socketClient,
+    });
+  }
 
   socketClient('__admin_events__', {
     event: 'drive:folder:updated',
@@ -1765,9 +1751,16 @@ const moveFolder = async ({ user, project, device, params, body }) => {
       const targetParent = updatedFolder.parent_folder_id
         ? await _getFolderById({ project, folderId: updatedFolder.parent_folder_id })
         : null;
-      const movedOwnerId = targetParent
-        ? targetParent.created_by
-        : updatedFolder.created_by;
+      // ZL-18885: route BOTH the moved folder's OWNER and the target folder's
+      // owner to My Drive (the moved folder belongs to its owner's drive; the
+      // target belongs to its owner's). Previously only the target parent's
+      // owner got My Drive, so the moved folder's owner (e.g. User A whose
+      // shared folder was moved by an all-rights sharee) wrongly landed in
+      // Shared With Me. Array is de-duped/filtered in splitReceiversByOwnership.
+      const movedOwnerId = [
+        toIdString(updatedFolder.created_by),
+        targetParent ? toIdString(targetParent.created_by) : null,
+      ].filter(Boolean);
 
       // Silent-mark prior unread notifications for THIS folder. Their levels
       // reflect the pre-move ancestry and would otherwise produce stale
@@ -1926,9 +1919,12 @@ const moveFolder = async ({ user, project, device, params, body }) => {
       const targetParent = updatedFolder.parent_folder_id
         ? await _getFolderById({ project, folderId: updatedFolder.parent_folder_id })
         : null;
-      const subtreeOwnerId = targetParent
-        ? targetParent.created_by
-        : updatedFolder.created_by;
+      // ZL-18885: same as the moved-folder OWN block — route both the moved
+      // subtree's owner and the target folder's owner to My Drive.
+      const subtreeOwnerId = [
+        toIdString(updatedFolder.created_by),
+        targetParent ? toIdString(targetParent.created_by) : null,
+      ].filter(Boolean);
 
       const dropByReceiver = new Map();
       priorSubtreeNotifications.forEach((n) => {

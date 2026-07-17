@@ -137,15 +137,21 @@ const validatePublicToken = async ({ token, recipientToken }) => {
 /* ───────────── Watermark resolution ───────────── */
 
 // Resolve the watermark template to the actual string the viewer overlays.
-// Fixed template in MVP — recipient email + ISO timestamp. If recipient
-// is missing (anonymous view), substitute "viewer" so we still get a
-// timestamp watermark.
+// ZL-20198: the watermark identifies WHO is viewing (recipient email for an
+// email share, or "viewer" for an anonymous copy-paste link) and WHO shared it
+// (the sender's name, baked into the template at creation — see
+// createShareLink). The previous format appended an ISO timestamp ("email • ISO
+// date/time"), which QA flagged as ugly and not what's wanted; we no longer add
+// a timestamp. Legacy links created before this change still carry a
+// `{timestamp}` token in their stored template, so we strip it here too.
 const resolveWatermark = ({ template, recipient }) => {
-  const email = recipient?.email || 'viewer';
-  const timestamp = new Date().toISOString();
-  return (template || '{email} • {timestamp}')
-    .replace('{email}', email)
-    .replace('{timestamp}', timestamp);
+  const who = recipient?.email || 'viewer';
+  return (template || '{email}')
+    .replace('{email}', who)
+    // Drop any legacy `{timestamp}` token (and a leading separator like " • ").
+    .replace(/\s*[•·|\-]?\s*\{timestamp\}/g, '')
+    .replace('{timestamp}', '')
+    .trim();
 };
 
 /* ───────────── Email send ───────────── */
@@ -388,6 +394,13 @@ const createShareLink = async ({ user, project, params, body, moduledata }) => {
     sent_on: now,
   }));
 
+  // ZL-20198: bake the sender's display name into the watermark template at
+  // creation so the viewer overlay reads "<recipient email / viewer> • Shared
+  // by <sender name>" — no date/time. Resolved from the creator we already have
+  // (same fallback chain the share email uses).
+  const senderWatermarkName = user?.full_name || user?.first_name || user?.email || 'a Zillit user';
+  const watermarkTemplate = `{email} • Shared by ${senderWatermarkName}`;
+
   const link = await DriveShareLinkRepository.create({
     data: {
       project_id: project._id,
@@ -404,6 +417,7 @@ const createShareLink = async ({ user, project, params, body, moduledata }) => {
       revoked: false,
       recipients,
       message: body.message || '',
+      watermark_template: watermarkTemplate,
     },
   });
 
