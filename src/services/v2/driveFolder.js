@@ -578,18 +578,21 @@ const getFolders = async ({ user, project, query }) => {
     const myAccesses = await DriveFolderAccessRepository.getAccesses({
       filters: accessFilter,
     });
-    const sharedAtByFolderId = new Map();
+    const latestShareByFolderId = new Map();
     for (const a of myAccesses) {
       const fid = String(a.folder_id?._id || a.folder_id);
       const t = a.created_on || 0;
       // Multiple rows possible: re-share after delete OR one row per
-      // recipient in shared_by_me — keep the max either way.
-      if (!sharedAtByFolderId.has(fid) || sharedAtByFolderId.get(fid) < t) {
-        sharedAtByFolderId.set(fid, t);
+      // recipient in shared_by_me — keep the max either way. `_sharedBy` is
+      // that same row's granter (folder access records it as `created_by`).
+      if (!latestShareByFolderId.has(fid) || latestShareByFolderId.get(fid).at < t) {
+        latestShareByFolderId.set(fid, { at: t, by: a.created_by?._id || a.created_by || null });
       }
     }
     for (const f of foldersWithPermissions) {
-      f._sharedAt = sharedAtByFolderId.get(String(f._id)) || 0;
+      const share = latestShareByFolderId.get(String(f._id));
+      f._sharedAt = share?.at || 0;
+      f._sharedBy = share?.by || null;
     }
     foldersWithPermissions.sort((a, b) => (b._sharedAt || 0) - (a._sharedAt || 0));
   }
@@ -1042,22 +1045,26 @@ const _enrichContentsWithSharedAt = async ({
   // Single id→shared_at map keyed by string id. Files and folders cannot
   // share ObjectId values across collections in practice, so a flat map
   // is safe.
-  const sharedAtById = new Map();
-  const upsertMax = (id, t) => {
+  // `_sharedBy` is the granter on the latest row: `created_by` on folder
+  // access, `granted_by` on file access.
+  const latestShareById = new Map();
+  const upsertMax = (id, t, by) => {
     const key = String(id);
-    if (!sharedAtById.has(key) || sharedAtById.get(key) < t) {
-      sharedAtById.set(key, t);
+    if (!latestShareById.has(key) || latestShareById.get(key).at < t) {
+      latestShareById.set(key, { at: t, by: by?._id || by || null });
     }
   };
   for (const a of folderAccesses) {
-    upsertMax(a.folder_id?._id || a.folder_id, a.created_on || 0);
+    upsertMax(a.folder_id?._id || a.folder_id, a.created_on || 0, a.created_by);
   }
   for (const a of fileAccesses) {
-    upsertMax(a.file_id?._id || a.file_id, a.created_on || 0);
+    upsertMax(a.file_id?._id || a.file_id, a.created_on || 0, a.granted_by);
   }
 
   for (const it of items) {
-    it._sharedAt = sharedAtById.get(String(it._id)) || 0;
+    const share = latestShareById.get(String(it._id));
+    it._sharedAt = share?.at || 0;
+    it._sharedBy = share?.by || null;
   }
   items.sort((a, b) => (b._sharedAt || 0) - (a._sharedAt || 0));
 };
