@@ -613,7 +613,7 @@ const getFiles = async ({ user, project, query }) => {
     const myAccesses = await DriveFileAccessRepository.getAccesses({
       filters: accessFilter,
     });
-    const sharedAtByFileId = new Map();
+    const latestShareByFileId = new Map();
     for (const a of myAccesses) {
       const fid = String(a.file_id?._id || a.file_id);
       const t = a.created_on || 0;
@@ -621,13 +621,16 @@ const getFiles = async ({ user, project, query }) => {
       //   - `shared`        — re-share after soft-delete creates a new row
       //   - `shared_by_me`  — one row per recipient; we want the latest
       //                       re-share to anyone
-      // Keep the max in either case.
-      if (!sharedAtByFileId.has(fid) || sharedAtByFileId.get(fid) < t) {
-        sharedAtByFileId.set(fid, t);
+      // Keep the max in either case. `_sharedBy` is that same row's
+      // granted_by — a ProjectUser id, same id space as `created_by`.
+      if (!latestShareByFileId.has(fid) || latestShareByFileId.get(fid).at < t) {
+        latestShareByFileId.set(fid, { at: t, by: a.granted_by?._id || a.granted_by || null });
       }
     }
     for (const f of filesWithPermissions) {
-      f._sharedAt = sharedAtByFileId.get(String(f._id)) || 0;
+      const share = latestShareByFileId.get(String(f._id));
+      f._sharedAt = share?.at || 0;
+      f._sharedBy = share?.by || null;
     }
     filesWithPermissions.sort((a, b) => (b._sharedAt || 0) - (a._sharedAt || 0));
   }
