@@ -462,9 +462,14 @@ const getFiles = async ({ user, project, query }) => {
       ...(accessibleFileIds.length > 0 ? [{ _id: { $in: accessibleFileIds } }] : []),
     ];
   } else {
+    // ZL-21434: only folders the user holds a real role on (owned / granted /
+    // inherited). The navigation set also includes folders that merely contain a
+    // file shared with them; filtering files by it exposed every other file in
+    // those folders. Individually shared files still come through accessibleFileIds.
     const accessibleFolderIds = await DriveAccessService.listAccessibleFolderIds({
       user,
       project,
+      contentOnly: true,
     });
 
     const accessibleFileIds = await DriveFileAccessRepository.distinctFileIds({

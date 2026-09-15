@@ -245,10 +245,19 @@ const collectDescendantFolderIds = async ({ projectId, rootFolderId, includeRoot
 };
 
 /**
- * Lists all folder IDs accessible to a user using $graphLookup.
+ * Lists folder IDs accessible to a user using $graphLookup.
  * Replaces BFS loop with batch expansion from seed folders (2 queries + 1 aggregation).
+ *
+ * Two different meanings of "accessible" (ZL-21434):
+ *   - contentOnly: true → folders whose CONTENTS the user may see: folders they
+ *     own or were granted, plus every descendant (inherited role). Matches
+ *     resolveFolderRole returning a role, so use it to decide which files show.
+ *   - default           → folders the user may NAVIGATE: the content set, plus
+ *     folders that only hold a file shared with them, plus the ancestor path to
+ *     reach any seed. Use it to list folders — never to expose files. A
+ *     file-level share must not reveal that folder's other files or subfolders.
  */
-const listAccessibleFolderIds = async ({ user, project }) => {
+const listAccessibleFolderIds = async ({ user, project, contentOnly = false }) => {
   // Get seed folder IDs: direct access + owned folders + folders containing files
   // the user has explicit file-level access to (3 parallel queries)
   const [directIds, ownFolders, fileAccessIds] = await Promise.all([
@@ -291,17 +300,19 @@ const listAccessibleFolderIds = async ({ user, project }) => {
     })(),
   ]);
 
-  const seedIds = new Set([
+  // Owned / directly granted folders carry a role over their whole subtree.
+  // Folders that only hold a file shared with the user do not (ZL-21434).
+  const grantSeedIds = new Set([
     ...directIds.map((id) => toIdString(id)),
     ...ownFolders.map((folder) => toIdString(folder._id)),
-    ...fileAccessIds,
-  ]);
+  ].filter(Boolean));
+  const seedIds = new Set([...grantSeedIds, ...fileAccessIds]);
 
   if (seedIds.size === 0) {
     return [];
   }
 
-  const seedObjectIds = Array.from(seedIds)
+  const toObjectIds = (ids) => Array.from(ids)
     .filter(Boolean)
     .map((id) => {
       try {
@@ -312,44 +323,55 @@ const listAccessibleFolderIds = async ({ user, project }) => {
     })
     .filter(Boolean);
 
-  if (seedObjectIds.length === 0) {
-    return Array.from(seedIds);
+  if (toObjectIds(seedIds).length === 0) {
+    return Array.from(contentOnly ? grantSeedIds : seedIds);
   }
 
-  // Expand descendants from all seed folders using $graphLookup (1 aggregation)
-  const collectionName = DriveFolder.collection.name;
-  const results = await DriveFolder.aggregate([
-    {
-      $match: {
-        _id: { $in: seedObjectIds },
-        project_id: project._id,
-        deleted_on: 0,
-      },
-    },
-    {
-      $graphLookup: {
-        from: collectionName,
-        startWith: '$_id',
-        connectFromField: '_id',
-        connectToField: 'parent_folder_id',
-        as: 'descendants',
-        maxDepth: 50,
-        restrictSearchWithMatch: {
-          deleted_on: 0,
+  // Content set: grant seeds plus all their descendants (1 aggregation). File-share
+  // seeds are deliberately NOT expanded — their subtree stays private.
+  const contentIds = new Set(grantSeedIds);
+  const grantSeedObjectIds = toObjectIds(grantSeedIds);
+  if (grantSeedObjectIds.length > 0) {
+    const collectionName = DriveFolder.collection.name;
+    const results = await DriveFolder.aggregate([
+      {
+        $match: {
+          _id: { $in: grantSeedObjectIds },
           project_id: project._id,
+          deleted_on: 0,
         },
       },
-    },
-    { $project: { descendants: '$descendants._id' } },
-  ]);
+      {
+        $graphLookup: {
+          from: collectionName,
+          startWith: '$_id',
+          connectFromField: '_id',
+          connectToField: 'parent_folder_id',
+          as: 'descendants',
+          maxDepth: 50,
+          restrictSearchWithMatch: {
+            deleted_on: 0,
+            project_id: project._id,
+          },
+        },
+      },
+      { $project: { descendants: '$descendants._id' } },
+    ]);
 
-  const allIds = new Set(seedIds);
-  results.forEach((doc) => {
-    (doc.descendants || []).forEach((id) => {
-      const idStr = toIdString(id);
-      if (idStr) allIds.add(idStr);
+    results.forEach((doc) => {
+      (doc.descendants || []).forEach((id) => {
+        const idStr = toIdString(id);
+        if (idStr) contentIds.add(idStr);
+      });
     });
-  });
+  }
+
+  if (contentOnly) {
+    return Array.from(contentIds);
+  }
+
+  // Navigation set: the content set plus folders holding a file shared with the user.
+  const allIds = new Set([...contentIds, ...fileAccessIds]);
 
   // Also include ancestor folders for all seed folders so users can navigate
   // the full folder path to reach folders containing their accessible files.
