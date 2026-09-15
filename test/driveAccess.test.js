@@ -15,6 +15,9 @@ const DriveFolderRepository = require('../src/repositories/v2/driveFolder').defa
 const DriveFolderAccessRepository = require('../src/repositories/v2/driveFolderAccess').default;
 const DriveFileAccessRepository = require('../src/repositories/v2/driveFileAccess').default;
 const DriveFolder = require('zillit-libs/mongo-models-v2/DriveFolder').default;
+const NotificationRepository = require('zillit-libs/repositories-v2/notification').default;
+const DriveNotificationReceivers = require('../src/services/v2/driveNotificationReceivers').default;
+const socketClientModule = require('../src/config/socketClient');
 
 describe('driveAccess service', () => {
   let sandbox;
@@ -355,6 +358,71 @@ describe('driveAccess service', () => {
         .find((data) => data.user_id === 'actor-12');
 
       expect(actorPayload.role).to.equal('owner');
+    });
+
+    const stubFolderShareSave = (priorRows) => {
+      sandbox.stub(DriveFolderAccessRepository, 'getAccess').resolves(null); // actor = creator → owner
+      sandbox.stub(DriveFolderAccessRepository, 'updateAccesses').resolves({});
+      sandbox.stub(DriveFolderAccessRepository, 'upsertAccess').resolves({});
+      // call 0 = prior-role snapshot; later calls (revoked lookup, final list) = []
+      sandbox.stub(DriveFolderAccessRepository, 'getAccesses').resolves([]).onCall(0).resolves(priorRows);
+      sandbox.stub(NotificationRepository, 'getNotifications').resolves([]);
+      sandbox.stub(NotificationRepository, 'getNotificationIDs').resolves([]);
+      sandbox.stub(NotificationRepository, 'updateNotification').resolves({});
+      const notifyStub = sandbox.stub(DriveNotificationReceivers, 'notifyAllTabRouted').resolves();
+      const socketStub = sandbox.stub(socketClientModule, 'default');
+      return { notifyStub, socketStub };
+    };
+    const shareFolder = { _id: 'folder-20', created_by: 'actor-20', parent_folder_id: null, folder_name: 'Specs' };
+    const folderNotifyReceivers = (notifyStub) => notifyStub.getCalls()
+      .map((c) => c.args[0])
+      .filter((a) => a.message) // the visible "shared with you" call, not the silent read-mark
+      .flatMap((a) => a.receiverIds.map(String))
+      .sort();
+    const folderSocketSharedWith = (socketStub) => socketStub.getCalls()
+      .map((c) => c.args[1])
+      .find((d) => d && d.event === 'drive:folder:shared')
+      .data.shared_with.map(String)
+      .sort();
+
+    it('notifies only users who are newly added or whose role changed', async () => {
+      const { notifyStub, socketStub } = stubFolderShareSave([
+        { user_id: 'user-a', role: 'viewer' },
+        { user_id: 'user-b', role: 'viewer' },
+      ]);
+
+      await DriveAccessService.setFolderAccessList({
+        user: { _id: 'actor-20' },
+        project,
+        folder: shareFolder,
+        entries: [
+          { user_id: 'user-a', role: 'viewer' }, // unchanged
+          { user_id: 'user-b', role: 'editor' }, // role changed
+          { user_id: 'user-e', role: 'viewer' }, // new
+        ],
+        replaceExisting: true,
+      });
+
+      expect(folderNotifyReceivers(notifyStub)).to.deep.equal(['user-b', 'user-e']);
+      // realtime refresh still covers everyone on the list
+      expect(folderSocketSharedWith(socketStub)).to.deep.equal(['user-a', 'user-b', 'user-e']);
+    });
+
+    it('sends no share notification when roles are unchanged', async () => {
+      const { notifyStub, socketStub } = stubFolderShareSave([
+        { user_id: 'user-a', role: 'viewer' },
+      ]);
+
+      await DriveAccessService.setFolderAccessList({
+        user: { _id: 'actor-20' },
+        project,
+        folder: shareFolder,
+        entries: [{ user_id: 'user-a', role: 'viewer' }],
+        replaceExisting: true,
+      });
+
+      expect(notifyStub.called).to.equal(false);
+      expect(folderSocketSharedWith(socketStub)).to.deep.equal(['user-a']);
     });
   });
 
