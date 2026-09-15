@@ -524,6 +524,21 @@ const setFolderAccessList = async ({
     normalizedByUser.set(actorUserId, 'owner');
   }
 
+  // Snapshot each user's current role BEFORE this save, so we only notify
+  // users whose permission actually changes (newly added, or role differs).
+  // Re-saving the list must not re-send "shared with you" to users whose
+  // access is unchanged.
+  const priorAccessRecords = await DriveFolderAccessRepository.getAccesses({
+    filters: {
+      project_id: project._id,
+      folder_id: folder._id,
+      deleted_on: 0,
+    },
+  });
+  const priorRoleByUser = new Map(
+    priorAccessRecords.map((r) => [toIdString(r.user_id?._id ? r.user_id._id : r.user_id), r.role]),
+  );
+
   let revokedUserIds = [];
 
   if (replaceExisting) {
@@ -585,9 +600,13 @@ const setFolderAccessList = async ({
     )
   );
 
-  // Notify new recipients about folder sharing
-  const newReceiverIds = Array.from(normalizedByUser.keys())
+  // Everyone on the list (minus the actor) still gets the realtime
+  // `drive:folder:shared` refresh, but only users whose role changed
+  // (newly added, or role differs) get a "shared with you" notification.
+  const sharedWithIds = Array.from(normalizedByUser.keys())
     .filter((id) => id !== toIdString(user._id));
+  const newReceiverIds = sharedWithIds
+    .filter((id) => priorRoleByUser.get(id) !== normalizedByUser.get(id));
 
   if (newReceiverIds.length > 0) {
     // ZL-18798: share recipients are BY DEFINITION sharees (they just got
@@ -693,14 +712,16 @@ const setFolderAccessList = async ({
     } catch (notifErr) {
       console.error('[driveAccess] Folder share notification error:', notifErr.message);
     }
+  }
 
+  if (sharedWithIds.length > 0) {
     socketClient('__admin_events__', {
       event: 'drive:folder:shared',
       room: `${project._id.toString()}_room`,
       data: {
         project_id: project._id,
         folder,
-        shared_with: newReceiverIds,
+        shared_with: sharedWithIds,
       },
     });
   }

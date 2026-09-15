@@ -517,6 +517,27 @@ const setFileAccessList = async ({ user, project, fileId, entries }) => {
     can_delete: true,
   });
 
+  // Snapshot each user's current access BEFORE this save, so we only notify
+  // users whose permission actually changes (newly added, or any flag
+  // differs). Re-saving the list must not re-send "shared with you" to users
+  // whose access is unchanged.
+  const priorAccessRecords = await DriveFileAccessRepository.getAccesses({
+    filters: {
+      project_id: projectId,
+      file_id: fileId,
+      deleted_on: 0,
+    },
+  });
+  const priorAccessByUser = new Map(
+    priorAccessRecords.map((r) => [toIdString(r.user_id?._id ? r.user_id._id : r.user_id), r]),
+  );
+  const PERMISSION_KEYS = ['can_view', 'can_edit', 'can_download', 'can_delete'];
+  const permissionChanged = (entry) => {
+    const prior = priorAccessByUser.get(toIdString(entry.user_id));
+    if (!prior) return true;
+    return PERMISSION_KEYS.some((key) => Boolean(prior[key]) !== Boolean(entry[key]));
+  };
+
   // Soft-delete entries for users not in the new list
   const keepUserIds = Array.from(normalizedEntries.keys());
 
@@ -575,9 +596,14 @@ const setFileAccessList = async ({ user, project, fileId, entries }) => {
     ),
   );
 
-  // Notify users who were granted access (excluding the actor)
-  const newReceiverIds = Array.from(normalizedEntries.values())
-    .filter((e) => toIdString(e.user_id) !== actorId)
+  // Everyone on the list (minus the actor) still gets the realtime
+  // `drive:file:shared` refresh, but only users whose permission changed
+  // (newly added, or any flag differs) get a "shared with you" notification.
+  const recipientEntries = Array.from(normalizedEntries.values())
+    .filter((e) => toIdString(e.user_id) !== actorId);
+  const sharedWithIds = recipientEntries.map((e) => e.user_id);
+  const newReceiverIds = recipientEntries
+    .filter(permissionChanged)
     .map((e) => e.user_id);
 
   if (newReceiverIds.length > 0) {
@@ -682,14 +708,16 @@ const setFileAccessList = async ({ user, project, fileId, entries }) => {
     } catch (err) {
       console.error('[file_access_notification_failed]:', err.message);
     }
+  }
 
+  if (sharedWithIds.length > 0) {
     socketClient('__admin_events__', {
       event: 'drive:file:shared',
       room: `${project._id.toString()}_room`,
       data: {
         project_id: project._id,
         file,
-        shared_with: newReceiverIds.map((id) => id.toString()),
+        shared_with: sharedWithIds.map((id) => id.toString()),
       },
     });
   }
