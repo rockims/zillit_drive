@@ -15,6 +15,9 @@ const DriveFileAccessService = require('../src/services/v2/driveFileAccess').def
 const DriveFileRepository = require('../src/repositories/v2/driveFile').default;
 const DriveFileAccessRepository = require('../src/repositories/v2/driveFileAccess').default;
 const DriveAccessService = require('../src/services/v2/driveAccess').default;
+const NotificationRepository = require('zillit-libs/repositories-v2/notification').default;
+const DriveNotificationReceivers = require('../src/services/v2/driveNotificationReceivers').default;
+const socketClientModule = require('../src/config/socketClient');
 
 describe('DriveFileAccess service', () => {
   let sandbox;
@@ -405,6 +408,71 @@ describe('DriveFileAccess service', () => {
       expect(filter.user_id.$nin).to.include('user-a');
       expect(filter.user_id.$nin).to.include('user-b');
       expect(filter.deleted_on).to.equal(0);
+    });
+
+    const stubShareSave = (priorRows) => {
+      sandbox.stub(DriveFileRepository, 'getFile').resolves(fileByA);
+      sandbox.stub(DriveFileAccessRepository, 'getAccess').resolves({
+        can_view: true, can_edit: true, can_download: true, can_delete: true,
+      });
+      sandbox.stub(DriveFileAccessRepository, 'updateAccesses').resolves({});
+      sandbox.stub(DriveFileAccessRepository, 'upsertAccess').resolves({});
+      // call 0 = prior-access snapshot; later calls (revoked lookup, final list) = []
+      sandbox.stub(DriveFileAccessRepository, 'getAccesses').resolves([]).onCall(0).resolves(priorRows);
+      sandbox.stub(NotificationRepository, 'getNotifications').resolves([]);
+      sandbox.stub(NotificationRepository, 'getNotificationIDs').resolves([]);
+      sandbox.stub(NotificationRepository, 'updateNotification').resolves({});
+      const notifyStub = sandbox.stub(DriveNotificationReceivers, 'notifyAllTabRouted').resolves();
+      const socketStub = sandbox.stub(socketClientModule, 'default');
+      return { notifyStub, socketStub };
+    };
+    const sharedNotifyReceivers = (notifyStub) => notifyStub.getCalls()
+      .map((c) => c.args[0])
+      .filter((a) => a.message) // the visible "shared with you" call, not the silent read-mark
+      .flatMap((a) => a.receiverIds.map(String))
+      .sort();
+    const socketSharedWith = (socketStub) => socketStub.getCalls()
+      .map((c) => c.args[1])
+      .find((d) => d && d.event === 'drive:file:shared')
+      .data.shared_with.map(String)
+      .sort();
+
+    it('notifies only users who are newly added or whose permission changed', async () => {
+      const { notifyStub, socketStub } = stubShareSave([
+        { user_id: 'user-b', can_view: true, can_edit: false, can_download: true, can_delete: false },
+        { user_id: 'user-c', can_view: true, can_edit: false, can_download: true, can_delete: false },
+      ]);
+
+      await DriveFileAccessService.setFileAccessList({
+        user: userA,
+        project,
+        fileId: 'file-a1',
+        entries: [
+          { user_id: 'user-b', can_view: true, can_edit: false, can_download: true }, // unchanged
+          { user_id: 'user-c', can_view: true, can_edit: true, can_download: true },  // edit granted
+          { user_id: 'user-d', can_view: true },                                      // new
+        ],
+      });
+
+      expect(sharedNotifyReceivers(notifyStub)).to.deep.equal(['user-c', 'user-d']);
+      // realtime refresh still covers everyone on the list
+      expect(socketSharedWith(socketStub)).to.deep.equal(['user-b', 'user-c', 'user-d']);
+    });
+
+    it('sends no share notification when the saved list is unchanged', async () => {
+      const { notifyStub, socketStub } = stubShareSave([
+        { user_id: 'user-b', can_view: true, can_edit: false, can_download: true, can_delete: false },
+      ]);
+
+      await DriveFileAccessService.setFileAccessList({
+        user: userA,
+        project,
+        fileId: 'file-a1',
+        entries: [{ user_id: 'user-b', can_view: true, can_edit: false, can_download: true }],
+      });
+
+      expect(notifyStub.called).to.equal(false);
+      expect(socketSharedWith(socketStub)).to.deep.equal(['user-b']);
     });
   });
 
