@@ -1077,18 +1077,43 @@ const moveFile = async ({ user, project, device, params, body }) => {
 
   const sourceFolderId = file.folder_id ? toIdString(file.folder_id) : null;
   const movedTargetFolderId = target_folder_id || null;
-  const moveReceiverIds = await DriveNotificationReceivers.getMoveReceivers({
+  const folderReceiverIds = await DriveNotificationReceivers.getMoveReceivers({
     project,
     actorId: user._id,
     sourceFolderId,
     targetFolderId: movedTargetFolderId,
   });
 
+  // ZL-21405/ZL-21406: getMoveReceivers only knows source/target FOLDER
+  // members. A user the FILE itself is shared with (root file shared from
+  // the upload dialog or the access list) was never in the list, so when the
+  // owner moved that file into a private folder nobody was notified — the
+  // sharee's badge stayed at the old location (level_1 'root') for good.
+  // Mirror moveFolder's folderOwnSharees: add the file's own sharees so they
+  // get the silent drop of their prior badge + the fresh drive_file_moved
+  // save at the new ancestry. Actor is excluded by both helpers.
+  const fileSharees = await DriveNotificationReceivers.getFileReceivers({
+    project,
+    actorId: user._id,
+    fileId: movedFile._id,
+  });
+  const moveReceiverIds = Array.from(new Set([
+    ...folderReceiverIds.map(toIdString),
+    ...fileSharees.map(toIdString),
+  ])).filter(Boolean);
+
   if (moveReceiverIds.length > 0) {
-    // ZL-18798: tab routing — use target folder's owner (move lands the
-    // file inside the new parent; that's the relevant tab on the receiver
-    // side). targetFolder was already fetched above.
-    const movedParentOwnerId = targetFolder?.created_by || null;
+    // ZL-18798: tab routing — the target folder's owner sees the move in
+    // My Drive (the file lands inside their folder). ZL-21405: the FILE's
+    // owner too — a file-level editor may move someone else's root file, and
+    // the owner always holds an owner access row (seedFileAccess), so
+    // without this they'd land in Shared With Me for their own file (same
+    // correction moveFolder got for ZL-18885). Array is de-duped / filtered
+    // in splitReceiversByOwnership.
+    const movedParentOwnerId = [
+      toIdString(movedFile.created_by),
+      targetFolder ? toIdString(targetFolder.created_by) : null,
+    ].filter(Boolean);
 
     // ZL-18871/-18872/-18873: silent-mark prior unread notifications for this
     // file before emitting the move notification. Their levels reflect the
