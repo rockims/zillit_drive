@@ -755,10 +755,19 @@ const getDriveContents = async ({ user, project, query }) => {
       { folder_name: listingQuery.searchRegex },
       { description: listingQuery.searchRegex },
     ];
-    fileFilters.$or = [
+    const fileSearchOr = [
       { file_name: listingQuery.searchRegex },
       { description: listingQuery.searchRegex },
     ];
+    // ZL-21434: combine with the root access $or ("created by me OR shared with
+    // me") instead of replacing it. Assigning $or here dropped the access check,
+    // so a root search returned every matching root file in the project.
+    if (fileFilters.$or) {
+      fileFilters.$and = [...(fileFilters.$and || []), { $or: fileFilters.$or }, { $or: fileSearchOr }];
+      delete fileFilters.$or;
+    } else {
+      fileFilters.$or = fileSearchOr;
+    }
   }
 
   if (listingQuery.quickFilter === 'mine') {

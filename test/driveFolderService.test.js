@@ -82,6 +82,51 @@ describe('driveFolder service', () => {
       expect(distinctStub.firstCall.args[0].filters.user_id).to.equal('user-2');
     });
 
+    it('keeps the file access filter when searching at root (ZL-21434)', async () => {
+      sandbox.stub(DriveAccessService, 'listAccessibleFolderIds').resolves([]);
+      sandbox.stub(DriveFileAccessRepository, 'distinctFileIds').resolves(['file-shared']);
+      const aggregateStub = sandbox.stub(DriveFolder, 'aggregate').resolves([{
+        items: [],
+        totalCount: [{ count: 0 }],
+        folderCount: [{ count: 0 }],
+        fileCount: [{ count: 0 }],
+      }]);
+
+      await DriveFolderService.getDriveContents({
+        user: { _id: 'user-2', admin_access: false },
+        project,
+        query: {
+          root: 'true',
+          search: 'budget',
+          paginate: 'true',
+          limit: '50',
+          offset: '0',
+        },
+      });
+
+      const findDeep = (node, key) => {
+        if (!node || typeof node !== 'object') return null;
+        if (Object.prototype.hasOwnProperty.call(node, key)) return node;
+        for (const value of Object.values(node)) {
+          const hit = findDeep(value, key);
+          if (hit) return hit;
+        }
+        return null;
+      };
+      const union = findDeep(aggregateStub.firstCall.args[0], '$unionWith');
+      const fileMatch = union.$unionWith.pipeline.find((stage) => stage.$match).$match;
+
+      // The search must not replace the access check: no bare search $or…
+      expect(fileMatch.$or).to.equal(undefined);
+      const orGroups = (fileMatch.$and || []).map((clause) => clause.$or || []);
+      // …the access group (own files OR explicitly shared) is still required…
+      expect(orGroups.some((group) => group.some((c) => c._id && c._id.$in && c._id.$in.includes('file-shared'))))
+        .to.equal(true);
+      expect(orGroups.some((group) => group.some((c) => c.created_by === 'user-2'))).to.equal(true);
+      // …and the name search is ANDed on top.
+      expect(orGroups.some((group) => group.some((c) => c.file_name))).to.equal(true);
+    });
+
     it('supports quick_filter=large_files using file aggregation', async () => {
       sandbox.stub(DriveAccessService, 'listAccessibleFolderIds').resolves([]);
       sandbox.stub(DriveFileAccessRepository, 'distinctFileIds').resolves([]);
