@@ -448,12 +448,12 @@ const seedFolderAccess = async ({ project, user, folder, parentFolderId = null }
             user_id: accessItem.user_id,
             role: accessItem.role,
             inherited: true,
-            created_by: user._id,
             updated_by: user._id,
-            created_on: now,
             updated_on: now,
             deleted_on: 0,
           },
+          // Stamped once — who granted this access never changes on re-save.
+          setOnInsert: { created_by: user._id, created_on: now },
         })
       )
     );
@@ -472,12 +472,11 @@ const seedFolderAccess = async ({ project, user, folder, parentFolderId = null }
       user_id: user._id,
       role: 'owner',
       inherited: false,
-      created_by: user._id,
       updated_by: user._id,
-      created_on: now,
       updated_on: now,
       deleted_on: 0,
     },
+    setOnInsert: { created_by: user._id, created_on: now },
   });
 };
 
@@ -612,12 +611,13 @@ const setFolderAccessList = async ({
           user_id: userId,
           role,
           inherited: false,
-          created_by: user._id,
           updated_by: user._id,
-          created_on: now,
           updated_on: now,
           deleted_on: 0,
         },
+        // Only a NEW row records who shared the folder; re-saving the access
+        // list must not reassign it (mirrors file access `granted_by`).
+        setOnInsert: { created_by: user._id, created_on: now },
       })
     )
   );
@@ -925,12 +925,11 @@ const inheritFolderAccessToDescendants = async ({
             user_id: accessItem.user_id,
             role: accessItem.role,
             inherited: true,
-            created_by: user._id,
             updated_by: user._id,
-            created_on: now,
             updated_on: now,
             deleted_on: 0,
           },
+          setOnInsert: { created_by: user._id, created_on: now },
         })
       );
     });
