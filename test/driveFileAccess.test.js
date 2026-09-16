@@ -474,6 +474,33 @@ describe('DriveFileAccess service', () => {
       expect(notifyStub.called).to.equal(false);
       expect(socketSharedWith(socketStub)).to.deep.equal(['user-b']);
     });
+
+    it('re-saving the list keeps the original sharer (granted_by only on insert)', async () => {
+      // user-b was shared in earlier by somebody else; userA now re-saves the
+      // list to add user-c. user-b's row must keep its original granter.
+      stubShareSave([
+        { user_id: 'user-b', can_view: true, can_edit: false, can_download: true, can_delete: false },
+      ]);
+
+      await DriveFileAccessService.setFileAccessList({
+        user: userA,
+        project,
+        fileId: 'file-a1',
+        entries: [
+          { user_id: 'user-b', can_view: true, can_edit: false, can_download: true },
+          { user_id: 'user-c', can_view: true },
+        ],
+      });
+
+      const calls = DriveFileAccessRepository.upsertAccess.getCalls().map((c) => c.args[0]);
+      expect(calls.length).to.be.greaterThan(0);
+      calls.forEach((call) => {
+        // never rewritten by a save…
+        expect(call.data).to.not.have.property('granted_by');
+        // …stamped only when the row is created
+        expect(String(call.setOnInsert.granted_by)).to.equal('user-a');
+      });
+    });
   });
 
   /* ─── getFileAccess ─── */

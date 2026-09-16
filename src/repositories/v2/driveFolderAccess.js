@@ -6,10 +6,18 @@ const getAccess = ({ filters }) => DriveFolderAccess.findOne(filters);
 
 const getAccesses = ({ filters, sort = { created_on: -1 } }) => DriveFolderAccess.find(filters).sort(sort);
 
-const upsertAccess = ({ filters, data }) =>
+// `setOnInsert` holds fields stamped once at row creation and never rewritten —
+// `created_by` above all, which records who granted this folder access. A field
+// may appear in `data` OR `setOnInsert`, never both (MongoDB rejects that).
+const upsertAccess = ({ filters, data, setOnInsert }) =>
   DriveFolderAccess.findOneAndUpdate(
     { ...filters },
-    { $set: { ...data } },
+    {
+      $set: { ...data },
+      ...(setOnInsert && Object.keys(setOnInsert).length > 0
+        ? { $setOnInsert: { ...setOnInsert } }
+        : {}),
+    },
     { upsert: true, new: true, setDefaultsOnInsert: true }
   );
 
