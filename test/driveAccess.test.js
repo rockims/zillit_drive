@@ -448,6 +448,47 @@ describe('driveAccess service', () => {
         expect(String(call.setOnInsert.created_by)).to.equal('actor-20');
       });
     });
+
+    it('keeps the folder owner at owner role and does not notify them', async () => {
+      // actor-20 holds an explicit owner grant but did NOT create the folder;
+      // the payload lists the real owner (owner-1) as a viewer.
+      sandbox.stub(DriveFolderAccessRepository, 'getAccess').resolves({ role: 'owner' });
+      sandbox.stub(DriveFolderAccessRepository, 'updateAccesses').resolves({});
+      sandbox.stub(DriveFolderAccessRepository, 'upsertAccess').resolves({});
+      sandbox.stub(DriveFolderAccessRepository, 'getAccesses').resolves([])
+        .onCall(0).resolves([{ user_id: 'owner-1', role: 'owner' }]);
+      sandbox.stub(NotificationRepository, 'getNotifications').resolves([]);
+      sandbox.stub(NotificationRepository, 'getNotificationIDs').resolves([]);
+      sandbox.stub(NotificationRepository, 'updateNotification').resolves({});
+      const notifyStub = sandbox.stub(DriveNotificationReceivers, 'notifyAllTabRouted').resolves();
+      sandbox.stub(socketClientModule, 'default');
+
+      await DriveAccessService.setFolderAccessList({
+        user: { _id: 'actor-20' },
+        project,
+        folder: {
+          _id: '69bd44ae7c279cc3e7322b09', created_by: 'owner-1',
+          parent_folder_id: null, folder_name: 'Specs',
+        },
+        entries: [
+          { user_id: 'owner-1', role: 'viewer' },
+          { user_id: 'user-e', role: 'viewer' },
+        ],
+        replaceExisting: true,
+      });
+
+      const ownerUpsert = DriveFolderAccessRepository.upsertAccess.getCalls()
+        .map((c) => c.args[0])
+        .find((a) => String(a.filters.user_id) === 'owner-1');
+      expect(ownerUpsert.data.role).to.equal('owner');
+
+      const notified = notifyStub.getCalls()
+        .map((c) => c.args[0])
+        .filter((a) => a.message)
+        .flatMap((a) => a.receiverIds.map(String))
+        .sort();
+      expect(notified).to.deep.equal(['user-e']);
+    });
   });
 
   describe('inheritFolderAccessToDescendants', () => {
