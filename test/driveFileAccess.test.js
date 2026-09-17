@@ -501,6 +501,31 @@ describe('DriveFileAccess service', () => {
         expect(String(call.setOnInsert.granted_by)).to.equal('user-a');
       });
     });
+
+    it('keeps the file owner at full access and does not notify them', async () => {
+      // userB (an editor) saves the list. The web sends the OWNER (user-a)
+      // without can_delete, which used to rewrite the owner's row → stored
+      // permission drift + a "shared with you" notification for their own file.
+      const { notifyStub } = stubShareSave([
+        { user_id: 'user-a', can_view: true, can_edit: true, can_download: true, can_delete: true },
+      ]);
+
+      await DriveFileAccessService.setFileAccessList({
+        user: userB,
+        project,
+        fileId: 'file-a1',
+        entries: [
+          { user_id: 'user-a', can_view: true, can_edit: true, can_download: true },
+          { user_id: 'user-c', can_view: true },
+        ],
+      });
+
+      const ownerUpsert = DriveFileAccessRepository.upsertAccess.getCalls()
+        .map((c) => c.args[0])
+        .find((a) => String(a.filters.user_id) === 'user-a');
+      expect(ownerUpsert.data.can_delete).to.equal(true);
+      expect(sharedNotifyReceivers(notifyStub)).to.deep.equal(['user-c']);
+    });
   });
 
   /* ─── getFileAccess ─── */

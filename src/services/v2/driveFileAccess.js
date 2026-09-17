@@ -515,6 +515,26 @@ const setFileAccessList = async ({ user, project, fileId, entries }) => {
     can_delete: true,
   });
 
+  // The file's OWNER keeps full access too, whatever the payload says. The web
+  // sends the owner in the entries list with only view/edit/download, so
+  // `can_delete` normalised to false and every save rewrote their row: it
+  // dropped the stored delete flag AND looked like a permission change, so the
+  // owner received a "shared with you" notification for their own file. Pinning
+  // it here also stops an owner-less payload from soft-deleting the owner's row
+  // in the revoke step below. Mirrors resolveFilePermission, which always
+  // resolves the creator/uploader to full access.
+  const fileOwner = file.created_by || file.uploaded_by;
+  const fileOwnerId = toIdString(fileOwner);
+  if (fileOwnerId) {
+    normalizedEntries.set(fileOwnerId, {
+      user_id: fileOwner,
+      can_view: true,
+      can_edit: true,
+      can_download: true,
+      can_delete: true,
+    });
+  }
+
   // Snapshot each user's current access BEFORE this save, so we only notify
   // users whose permission actually changes (newly added, or any flag
   // differs). Re-saving the list must not re-send "shared with you" to users

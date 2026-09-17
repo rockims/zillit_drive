@@ -545,6 +545,17 @@ const setFolderAccessList = async ({
     normalizedByUser.set(actorUserId, 'owner');
   }
 
+  // The folder's OWNER keeps the owner role whatever the payload says — the
+  // same trap as file access: a save that listed them with a lower role
+  // rewrote their row, which read as a permission change and sent them a
+  // "shared with you" notification for their own folder (and, with
+  // replaceExisting, an owner-less payload would soft-delete their row).
+  // Mirrors resolveFolderRole, which resolves the creator to 'owner'.
+  const folderOwnerId = toIdString(folder.created_by);
+  if (folderOwnerId) {
+    normalizedByUser.set(folderOwnerId, 'owner');
+  }
+
   // Snapshot each user's current role BEFORE this save, so we only notify
   // users whose permission actually changes (newly added, or role differs).
   // Re-saving the list must not re-send "shared with you" to users whose
