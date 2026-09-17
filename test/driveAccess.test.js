@@ -424,6 +424,30 @@ describe('driveAccess service', () => {
       expect(notifyStub.called).to.equal(false);
       expect(folderSocketSharedWith(socketStub)).to.deep.equal(['user-a']);
     });
+
+    it('re-saving the list keeps the original sharer (created_by only on insert)', async () => {
+      stubFolderShareSave([
+        { user_id: 'user-a', role: 'viewer' },
+      ]);
+
+      await DriveAccessService.setFolderAccessList({
+        user: { _id: 'actor-20' },
+        project,
+        folder: shareFolder,
+        entries: [
+          { user_id: 'user-a', role: 'viewer' },
+          { user_id: 'user-e', role: 'viewer' },
+        ],
+        replaceExisting: true,
+      });
+
+      const calls = DriveFolderAccessRepository.upsertAccess.getCalls().map((c) => c.args[0]);
+      expect(calls.length).to.be.greaterThan(0);
+      calls.forEach((call) => {
+        expect(call.data).to.not.have.property('created_by');
+        expect(String(call.setOnInsert.created_by)).to.equal('actor-20');
+      });
+    });
   });
 
   describe('inheritFolderAccessToDescendants', () => {

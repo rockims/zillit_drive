@@ -155,11 +155,11 @@ const seedFileAccess = async ({ project, user, file, entries = [] }) => {
       can_edit: true,
       can_download: true,
       can_delete: true,
-      granted_by: grantedBy,
-      created_on: now,
       updated_on: now,
       deleted_on: 0,
     },
+    // Stamped once — a later re-save must not reassign the original granter.
+    setOnInsert: { granted_by: grantedBy, created_on: now },
   });
 
   // Create entries for explicitly specified users (editors — can_delete defaults to false)
@@ -188,11 +188,10 @@ const seedFileAccess = async ({ project, user, file, entries = [] }) => {
               can_edit: perms.can_edit,
               can_download: perms.can_download,
               can_delete: perms.can_delete,
-              granted_by: grantedBy,
-              created_on: now,
               updated_on: now,
               deleted_on: 0,
             },
+            setOnInsert: { granted_by: grantedBy, created_on: now },
           });
         }),
     );
@@ -285,11 +284,10 @@ const snapshotFolderAccessToFile = async ({
         can_edit: permissions.can_edit,
         can_download: permissions.can_download,
         can_delete: permissions.can_delete,
-        granted_by: actorId,
-        created_on: now,
         updated_on: now,
         deleted_on: 0,
       },
+      setOnInsert: { granted_by: actorId, created_on: now },
     });
   }));
 };
@@ -588,10 +586,15 @@ const setFileAccessList = async ({ user, project, fileId, entries }) => {
           can_edit: entry.can_edit,
           can_download: entry.can_download,
           can_delete: entry.can_delete || false,
-          granted_by: grantedBy,
           updated_on: now,
           deleted_on: 0,
         },
+        // ZL-21229 follow-up: only a NEW row records who shared it. Re-saving
+        // the list (e.g. adding one more person) previously rewrote every
+        // row's granted_by to the current actor, so a recipient saw
+        // "shared by <themselves>" and the original sharer lost the item
+        // from their Shared by Me.
+        setOnInsert: { granted_by: grantedBy, created_on: now },
       }),
     ),
   );

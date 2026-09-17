@@ -14,6 +14,9 @@ const DriveAccessService = require('../src/services/v2/driveAccess').default;
 const DriveFolderRepository = require('../src/repositories/v2/driveFolder').default;
 const DriveFolderAccessRepository = require('../src/repositories/v2/driveFolderAccess').default;
 const DriveFileAccessRepository = require('../src/repositories/v2/driveFileAccess').default;
+const DriveFileRepository = require('../src/repositories/v2/driveFile').default;
+const DriveFileService = require('../src/services/v2/driveFile').default;
+const DriveFolder = require('zillit-libs/mongo-models-v2/DriveFolder').default;
 
 describe('Private Drive — Access Isolation', () => {
   let sandbox;
@@ -162,6 +165,81 @@ describe('Private Drive — Access Isolation', () => {
       expect(result).to.include('folder-a2');
       // Should NOT include folder-b1 (userB's folder)
       expect(result).to.not.include('folder-b1');
+    });
+  });
+
+  /* ─── File-level shares must not expose the rest of the folder (ZL-21434) ─── */
+
+  describe('file-level share visibility (ZL-21434)', () => {
+    // Real ObjectId strings so the $graphLookup / ancestor path runs.
+    const PARENT = '69bd44ae7c279cc3e7322b01'; // A's folder above F
+    const F = '69bd44ae7c279cc3e7322b02';      // A's private folder holding the shared file
+    const SUB = '69bd44ae7c279cc3e7322b03';    // A's private subfolder inside F
+    const GRANTED = '69bd44ae7c279cc3e7322b04'; // folder explicitly shared with B
+    const CHILD = '69bd44ae7c279cc3e7322b05';  // subfolder of GRANTED
+
+    const allFolders = [
+      { _id: PARENT, parent_folder_id: null },
+      { _id: F, parent_folder_id: PARENT },
+      { _id: SUB, parent_folder_id: F },
+      { _id: GRANTED, parent_folder_id: null },
+      { _id: CHILD, parent_folder_id: GRANTED },
+    ];
+
+    const stubSeeds = ({ directIds = [], sharedFileFolderIds = [] }) => {
+      sandbox.stub(DriveFolderAccessRepository, 'distinctFolderIds').resolves(directIds);
+      sandbox.stub(DriveFolderRepository, 'getFolders')
+        .callsFake(({ filters }) => Promise.resolve(filters.created_by ? [] : allFolders));
+      sandbox.stub(DriveFileAccessRepository, 'distinctFileIds')
+        .resolves(sharedFileFolderIds.map((_, i) => `file-${i}`));
+      sandbox.stub(DriveFileRepository, 'getFiles')
+        .resolves(sharedFileFolderIds.map((folderId, i) => ({ _id: `file-${i}`, folder_id: folderId })));
+    };
+
+    it('a file shared out of a private folder makes only that folder reachable, not its subtree', async () => {
+      stubSeeds({ sharedFileFolderIds: [F] });
+      // If F were expanded, its private subfolder would leak.
+      const aggregate = sandbox.stub(DriveFolder, 'aggregate').resolves([{ descendants: [SUB] }]);
+
+      const nav = await DriveAccessService.listAccessibleFolderIds({ user: userB, project });
+
+      expect(nav).to.include(F);       // can open the folder to reach the shared file
+      expect(nav).to.include(PARENT);  // and walk the path to it
+      expect(nav).to.not.include(SUB); // but not A's other private folders
+      expect(aggregate.called).to.equal(false);
+    });
+
+    it('contentOnly excludes folders reached only through a file-level share', async () => {
+      stubSeeds({ sharedFileFolderIds: [F] });
+      sandbox.stub(DriveFolder, 'aggregate').resolves([{ descendants: [SUB] }]);
+
+      const content = await DriveAccessService.listAccessibleFolderIds({
+        user: userB, project, contentOnly: true,
+      });
+
+      expect(content).to.deep.equal([]);
+    });
+
+    it('owned or granted folders still expose their subtree in both sets', async () => {
+      stubSeeds({ directIds: [GRANTED], sharedFileFolderIds: [F] });
+      sandbox.stub(DriveFolder, 'aggregate').resolves([{ descendants: [CHILD] }]);
+
+      const content = await DriveAccessService.listAccessibleFolderIds({
+        user: userB, project, contentOnly: true,
+      });
+      expect(content.sort()).to.deep.equal([GRANTED, CHILD].sort());
+    });
+
+    it('flat file listing filters files by the content set, not the navigation set', async () => {
+      const listStub = sandbox.stub(DriveAccessService, 'listAccessibleFolderIds').resolves([]);
+      sandbox.stub(DriveFileAccessRepository, 'distinctFileIds').resolves([]);
+      sandbox.stub(DriveFileRepository, 'getFiles').resolves([]);
+      if (DriveFileRepository.countFiles) sandbox.stub(DriveFileRepository, 'countFiles').resolves(0);
+
+      await DriveFileService.getFiles({ user: userB, project, query: {} });
+
+      expect(listStub.calledOnce).to.equal(true);
+      expect(listStub.firstCall.args[0].contentOnly).to.equal(true);
     });
   });
 
