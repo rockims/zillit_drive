@@ -7,13 +7,16 @@ import { createServer } from 'node:http';
 // import { fileURLToPath } from 'url';
 
 import dotenv from 'dotenv';
+import axios from 'axios';
 
 import { mongodbConnect } from 'zillit-libs/config';
+import { installServiceToken } from 'zillit-libs/utils/service-token';
 import app from './app';
 
 // const __dirname = dirname(fileURLToPath(import.meta.url));
 
 dotenv.config();
+installServiceToken(axios);
 
 process.on('uncaughtException', (error, source) => {
   fs.writeSync(process.stderr.fd, `${error.message}\n`, source);
