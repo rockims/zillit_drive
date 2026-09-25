@@ -3,11 +3,11 @@
  * driveVersionDiffQueue.js with its own memory cap, so a large workbook
  * can't stall or exhaust the API process.
  *
- * Receives { before, after, maxChanges } where before/after are
+ * Receives { before, after, extension } where before/after are
  * { bucket, key, region }; downloads both, compares, replies once, exits.
  */
 import { getObjectBuffer } from '../../utils/driveS3.js';
-import { diffWorkbookBuffers } from './driveVersionDiff.js';
+import { diffVersionBuffers } from './driveVersionDiff.js';
 
 const reply = (message) => {
   if (process.send) {
@@ -23,7 +23,10 @@ process.once('message', async (input) => {
       getObjectBuffer(input.before),
       getObjectBuffer(input.after),
     ]);
-    const result = diffWorkbookBuffers(before, after, { maxChanges: input.maxChanges });
+    const result = diffVersionBuffers(before, after, {
+      extension: input.extension,
+      maxChanges: input.maxChanges,
+    });
     reply({ ok: true, result });
   } catch (error) {
     reply({ ok: false, error: error.message || String(error) });

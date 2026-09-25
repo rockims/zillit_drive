@@ -185,14 +185,43 @@ describe('Drive version store', () => {
       expect(created[0]).to.include({ save_type: 'legacy', saved_by: SAVER, saved_at: 4000 });
     });
 
-    it('skips the comparison for types it cannot read and for large files', async () => {
+    it('compares every type the editor opens, skipping other types and large files', async () => {
       const { comparisonFor } = DriveVersionStore;
-      expect(comparisonFor({ file: { file_name: 'a.docx' }, sizeBytes: 10, hasPrevious: true }))
+      ['xlsx', 'xls', 'ods', 'csv', 'docx', 'doc', 'odt', 'rtf', 'txt', 'pptx', 'ppt', 'odp'].forEach((extension) => {
+        expect(comparisonFor({ file: { file_name: `a.${extension}` }, sizeBytes: 10, hasPrevious: true }))
+          .to.deep.equal({ status: 'pending', reason: '' });
+      });
+      expect(comparisonFor({ file: { file_name: 'a.pdf' }, sizeBytes: 10, hasPrevious: true }))
         .to.deep.equal({ status: 'skipped', reason: 'unsupported_type' });
       expect(comparisonFor({ file: { file_name: 'a.xlsx' }, sizeBytes: 50 * 1024 * 1024, hasPrevious: true }))
         .to.deep.equal({ status: 'skipped', reason: 'too_large' });
       expect(comparisonFor({ file: { file_name: 'a.xlsx' }, sizeBytes: 10, hasPrevious: false }))
         .to.deep.equal({ status: 'none', reason: '' });
+    });
+
+    it('puts versions skipped before their type could be compared back in the queue, once', async () => {
+      const update = sandbox.stub(DriveFileVersionRepository, 'updateVersions').resolves();
+      const skipped = (id, extra = {}) => ({
+        _id: id, file_size_bytes: 10, changes: { status: 'skipped', reason: 'unsupported_type' }, ...extra,
+      });
+      const ids = await DriveVersionStore.requeueNewlyComparable({
+        file: { file_name: 'Notes.doc' },
+        versions: [
+          skipped('a'),
+          skipped('b', { changes: { status: 'done' } }),
+          skipped('c', { file_size_bytes: 50 * 1024 * 1024 }),
+          skipped('d', { changes: { status: 'skipped', reason: 'too_large' } }),
+        ],
+      });
+      expect(ids).to.deep.equal(['a']);
+      const { filters, data } = update.firstCall.args[0];
+      expect(filters).to.deep.include({ 'changes.status': 'skipped', 'changes.reason': 'unsupported_type' });
+      expect(data).to.include({ 'changes.status': 'pending', 'changes.attempts': 0 });
+
+      update.resetHistory();
+      expect(await DriveVersionStore.requeueNewlyComparable({ file: { file_name: 'Scan.pdf' }, versions: [skipped('e')] }))
+        .to.deep.equal([]);
+      expect(update.called).to.equal(false);
     });
 
     it('propagates an S3 failure and records no version', async () => {

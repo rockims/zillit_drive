@@ -1,10 +1,11 @@
 import path from 'path';
 import { fork } from 'child_process';
 
+import DriveFileRepository from '../../repositories/v2/driveFile.js';
 import DriveFileVersionRepository from '../../repositories/v2/driveFileVersion.js';
 import DriveFileVersionChangeRepository from '../../repositories/v2/driveFileVersionChange.js';
 import socketClient from '../../config/socketClient.js';
-import { DEFAULT_MAX_CHANGES } from './driveVersionDiff.js';
+import DriveVersionStore from './driveVersionStore.js';
 
 /**
  * Background comparisons of each saved version against the one before.
@@ -89,6 +90,15 @@ const emitChanges = (version, status) => {
   });
 };
 
+// The type to read both copies as: the saved copy's extension (every
+// version is stored with one), else the file's.
+const extensionFor = async (version) => {
+  const fromKey = path.extname(version.s3_key || '').slice(1).toLowerCase();
+  if (fromKey) return fromKey;
+  const file = await DriveFileRepository.getFile({ filters: { _id: version.file_id } });
+  return file ? DriveVersionStore.extensionOf(file) : '';
+};
+
 // Compare one claimed version with the version before it.
 const processVersion = async (version) => {
   const previous = await DriveFileVersionRepository.getPreviousVersion({
@@ -109,7 +119,7 @@ const processVersion = async (version) => {
   const outcome = await DriveVersionDiffQueue.runInChild({
     before: { bucket: previous.s3_bucket, key: previous.s3_key, region: previous.s3_region },
     after: { bucket: version.s3_bucket, key: version.s3_key, region: version.s3_region },
-    maxChanges: DEFAULT_MAX_CHANGES,
+    extension: await extensionFor(version),
   });
 
   if (!outcome.ok) {
