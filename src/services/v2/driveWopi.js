@@ -8,9 +8,10 @@ import DriveActivityService from './driveActivity.js';
 import DriveVersionStore from './driveVersionStore.js';
 import DriveVersionDiffQueue from './driveVersionDiffQueue.js';
 import DriveEditPresenceService from './driveEditPresence.js';
+import DriveSheetView from './driveSheetView.js';
 import socketClient from '../../config/socketClient.js';
 import { signAccessToken, verifyAccessToken, getAccessTokenTTL } from '../../utils/editorJwt.js';
-import { getS3Client, getFileS3Info } from '../../utils/driveS3.js';
+import { getS3Client, getFileS3Info, getObjectBuffer } from '../../utils/driveS3.js';
 
 /**
  * The file host side of the document editor (WOPI). Collabora calls these
@@ -259,13 +260,28 @@ const getFileContents = async ({ params, query, res }) => {
   const file = await loadFile({ fileId, tokenPayload });
 
   let source;
+  let sizeBytes = file.file_size_bytes;
   if (versionId) {
     const version = await loadVersion({ file, versionId, tokenPayload });
     source = { s3Key: version.s3_key, bucket: version.s3_bucket, region: version.s3_region };
+    sizeBytes = version.file_size_bytes;
   } else {
     source = getFileS3Info(file);
   }
   if (!source.s3Key) throw new BadRequest('file_has_no_storage_path');
+
+  // Read-only opens can't be moved to A1 from the page, so the copy they
+  // get has the last saver's cursor and scroll position removed.
+  const readOnly = !!versionId || !tokenPayload.canEdit;
+  const extension = DriveVersionStore.extensionOf(file);
+  if (readOnly && DriveSheetView.canReset({ extension, sizeBytes })) {
+    const original = await getObjectBuffer({ bucket: source.bucket, key: source.s3Key, region: source.region });
+    const body = DriveSheetView.resetSavedPosition(original);
+    res.setHeader('Content-Type', file.mime_type || 'application/octet-stream');
+    res.setHeader('Content-Length', body.length);
+    res.end(body);
+    return null;
+  }
 
   const s3Response = await getS3Client(source.region).send(new GetObjectCommand({
     Bucket: source.bucket,
