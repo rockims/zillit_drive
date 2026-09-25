@@ -1,5 +1,8 @@
 import * as XLSX from 'xlsx';
 
+import DriveDocumentDiff from './driveDocumentDiff.js';
+import { DOCUMENT_EXTENSIONS, PRESENTATION_EXTENSIONS } from './driveDocumentText.js';
+
 /**
  * Cell-by-cell comparison of two spreadsheet versions.
  *
@@ -18,6 +21,13 @@ import * as XLSX from 'xlsx';
 // whole cell.
 const MAX_TEXT = 200;
 const DEFAULT_MAX_CHANGES = 5000;
+
+const SPREADSHEET_EXTENSIONS = new Set(['xlsx', 'xlsm', 'xls', 'ods', 'csv']);
+// Every format the editor opens: spreadsheets cell by cell, documents and
+// presentations paragraph by paragraph (driveDocumentDiff.js).
+const COMPARABLE_EXTENSIONS = new Set([
+  ...SPREADSHEET_EXTENSIONS, ...DOCUMENT_EXTENSIONS, ...PRESENTATION_EXTENSIONS,
+]);
 
 const trimText = (text) => (text.length > MAX_TEXT ? `${text.slice(0, MAX_TEXT - 1)}…` : text);
 
@@ -147,7 +157,24 @@ const diffWorkbookBuffers = (bufferBefore, bufferAfter, { maxChanges = DEFAULT_M
   };
 };
 
+/**
+ * Compare two versions of a file of the given type. Without a type the
+ * file is read as a spreadsheet, as before documents were compared.
+ */
+const diffVersionBuffers = (bufferBefore, bufferAfter, { extension, maxChanges } = {}) => {
+  const type = String(extension || '').toLowerCase();
+  const cap = maxChanges ? { maxChanges } : {};
+  if (!type || SPREADSHEET_EXTENSIONS.has(type)) return diffWorkbookBuffers(bufferBefore, bufferAfter, cap);
+  if (COMPARABLE_EXTENSIONS.has(type)) {
+    return DriveDocumentDiff.diffDocumentBuffers(bufferBefore, bufferAfter, { extension: type, ...cap });
+  }
+  throw new Error('unsupported_type');
+};
+
 export {
   diffWorkbookBuffers,
+  diffVersionBuffers,
   DEFAULT_MAX_CHANGES,
+  SPREADSHEET_EXTENSIONS,
+  COMPARABLE_EXTENSIONS,
 };

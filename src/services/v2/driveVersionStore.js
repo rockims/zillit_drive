@@ -7,6 +7,7 @@ import DriveFileRepository from '../../repositories/v2/driveFile.js';
 import DriveFileVersionRepository from '../../repositories/v2/driveFileVersion.js';
 import DriveEditPresenceService from './driveEditPresence.js';
 import { getS3Client, getFileS3Info, copySource } from '../../utils/driveS3.js';
+import { COMPARABLE_EXTENSIONS } from './driveVersionDiff.js';
 
 /**
  * Writes Drive file versions.
@@ -24,8 +25,6 @@ import { getS3Client, getFileS3Info, copySource } from '../../utils/driveS3.js';
 // Saves closer together than this belong to one editing session.
 const SESSION_GAP_MS = 30 * 60 * 1000;
 const EDITOR_SAVE_TYPES = ['autosave', 'manual', 'exit'];
-// Spreadsheet formats the comparison can read.
-const COMPARABLE_EXTENSIONS = new Set(['xlsx', 'xlsm', 'xls', 'ods', 'csv']);
 const COMPARE_MAX_BYTES = Number(process.env.DRIVE_VERSION_DIFF_MAX_BYTES) || 20 * 1024 * 1024;
 
 const sha256 = (buffer) => crypto.createHash('sha256').update(buffer).digest('hex');
@@ -232,6 +231,25 @@ const recordEditorSave = async ({
  * the restore stays in the history, and the restore is a version of its
  * own, so it can be undone the same way.
  */
+/**
+ * Versions saved before their file type could be compared were marked
+ * skipped. Put those back in the queue now that it can; the status filter
+ * makes this happen once. Returns the ids put back.
+ */
+const requeueNewlyComparable = async ({ file, versions }) => {
+  if (!COMPARABLE_EXTENSIONS.has(extensionOf(file))) return [];
+  const ids = versions
+    .filter((v) => v.changes?.status === 'skipped' && v.changes?.reason === 'unsupported_type'
+      && (v.file_size_bytes || 0) <= COMPARE_MAX_BYTES)
+    .map((v) => v._id);
+  if (!ids.length) return [];
+  await DriveFileVersionRepository.updateVersions({
+    filters: { _id: { $in: ids }, 'changes.status': 'skipped', 'changes.reason': 'unsupported_type' },
+    data: { 'changes.status': 'pending', 'changes.reason': '', 'changes.attempts': 0 },
+  });
+  return ids;
+};
+
 const restoreFromVersion = async ({
   file, projectId, userId, version,
 }) => {
@@ -307,6 +325,7 @@ export default {
   ensureBaseline,
   recordEditorSave,
   restoreFromVersion,
+  requeueNewlyComparable,
   comparisonFor,
   sessionFor,
   extensionOf,
