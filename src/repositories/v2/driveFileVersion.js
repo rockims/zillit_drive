@@ -24,6 +24,8 @@ const hasLegacyVersions = ({ fileId }) => DriveFileVersion
 
 const updateVersion = ({ filters, data }) => DriveFileVersion.updateOne(filters, { $set: data });
 
+const updateVersions = ({ filters, data }) => DriveFileVersion.updateMany(filters, { $set: data });
+
 /**
  * Claim the oldest version waiting for its comparison. A run left in
  * "running" longer than `staleBefore` (a crashed process) is claimed again.
@@ -51,5 +53,6 @@ export default {
   getPreviousVersion,
   hasLegacyVersions,
   updateVersion,
+  updateVersions,
   claimPendingComparison,
 };

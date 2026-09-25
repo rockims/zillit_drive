@@ -19,7 +19,7 @@ const version = (extra = {}) => ({
   project_id: 'p1',
   file_id: 'f1',
   version_number: 2,
-  s3_key: 'k2',
+  s3_key: 'k2.xlsx',
   s3_bucket: 'b',
   s3_region: 'ap-south-1',
   changes: { attempts: 1 },
@@ -40,7 +40,7 @@ describe('Drive version comparison queue', () => {
 
   it('stores the changes and marks the version done', async () => {
     sandbox.stub(DriveFileVersionRepository, 'getPreviousVersion').resolves({
-      _id: 'v1', s3_key: 'k1', s3_bucket: 'b', s3_region: 'ap-south-1',
+      _id: 'v1', s3_key: 'k1.xlsx', s3_bucket: 'b', s3_region: 'ap-south-1',
     });
     sandbox.stub(DriveVersionDiffQueue, 'runInChild').resolves({
       ok: true,
@@ -50,8 +50,9 @@ describe('Drive version comparison queue', () => {
     await DriveVersionDiffQueue.processVersion(version());
 
     const input = DriveVersionDiffQueue.runInChild.firstCall.args[0];
-    expect(input.before).to.deep.equal({ bucket: 'b', key: 'k1', region: 'ap-south-1' });
-    expect(input.after).to.deep.equal({ bucket: 'b', key: 'k2', region: 'ap-south-1' });
+    expect(input.before).to.deep.equal({ bucket: 'b', key: 'k1.xlsx', region: 'ap-south-1' });
+    expect(input.after).to.deep.equal({ bucket: 'b', key: 'k2.xlsx', region: 'ap-south-1' });
+    expect(input.extension).to.equal('xlsx');
 
     const saved = DriveFileVersionChangeRepository.saveChanges.firstCall.args[0];
     expect(saved.versionId).to.equal('v2');

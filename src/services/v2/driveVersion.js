@@ -179,6 +179,18 @@ const getHistory = async ({ user, project, params }) => {
     limit: HISTORY_LIMIT,
   });
 
+  const requeued = new Set((await DriveVersionStore.requeueNewlyComparable({ file, versions: records })).map(String));
+  if (requeued.size) {
+    records.forEach((record) => {
+      if (!requeued.has(String(record._id))) return;
+      /* eslint-disable no-param-reassign */
+      record.changes.status = 'pending';
+      record.changes.reason = '';
+      /* eslint-enable no-param-reassign */
+    });
+    DriveVersionDiffQueue.kick();
+  }
+
   const presented = presentVersions(records, file);
   const current = currentEntryFor(file, presented);
   const newestFirst = [...(current ? [current] : []), ...presented.reverse()];
@@ -205,11 +217,13 @@ const getVersionChanges = async ({ user, project, params }) => {
     user, project, fileId: params.fileId, permission: 'view',
   });
   const version = await loadVersion({ project, file, versionId: params.versionId });
-  const status = version.changes?.status || 'none';
+  const requeued = await DriveVersionStore.requeueNewlyComparable({ file, versions: [version] });
+  if (requeued.length) DriveVersionDiffQueue.kick();
+  const status = requeued.length ? 'pending' : (version.changes?.status || 'none');
   const base = {
     version_id: version._id,
     status,
-    reason: version.changes?.reason || '',
+    reason: requeued.length ? '' : (version.changes?.reason || ''),
     total: version.changes?.cells || 0,
     truncated: !!version.changes?.truncated,
     sheets: [],
