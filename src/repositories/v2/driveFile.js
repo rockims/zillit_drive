@@ -41,6 +41,22 @@ const deleteFile = ({ filters, data }) => DriveFile.updateOne({ ...filters }, { 
 
 const getFilesByFolder = ({ filters, sort = { updated_on: -1, created_on: -1, _id: 1 } }) => DriveFile.find(filters).sort(sort);
 
+// Version numbers come from an atomic counter on the file. Files that
+// already have versions start the counter at their highest number.
+const raiseVersionSeqFloor = ({ fileId, floor }) => DriveFile.updateOne(
+  { _id: fileId },
+  { $max: { version_seq: floor } },
+);
+
+const incrementVersionSeq = async ({ fileId }) => {
+  const updated = await DriveFile.findOneAndUpdate(
+    { _id: fileId },
+    { $inc: { version_seq: 1 } },
+    { new: true, projection: { version_seq: 1 } },
+  );
+  return updated?.version_seq;
+};
+
 export default {
   createFile,
   getFile,
@@ -51,4 +67,6 @@ export default {
   countFiles,
   deleteFile,
   getFilesByFolder,
+  raiseVersionSeqFloor,
+  incrementVersionSeq,
 };
