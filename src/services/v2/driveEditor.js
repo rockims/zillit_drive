@@ -6,6 +6,7 @@ import jwt from 'jsonwebtoken';
 import DriveFileRepository from '../../repositories/v2/driveFile.js';
 import DriveFileAccessService from './driveFileAccess.js';
 import DriveWopiService from './driveWopi.js';
+import DriveEditPresenceService from './driveEditPresence.js';
 import { WOPI_SECRET } from '../../utils/editorJwt.js';
 
 /* ───────────── Collabora Config ───────────── */
@@ -104,6 +105,35 @@ const getEditorConfig = async ({ user, project, params, query = {} }) => {
   };
 };
 
+/* ───────────── Editor Presence ───────────── */
+
+const PRESENCE_STATES = ['open', 'heartbeat', 'close'];
+
+/**
+ * The web editor calls this when it opens a file, every minute while it
+ * stays open, and when it closes. Whether the person counts as an editor
+ * comes from their permission on the file, not from the client.
+ */
+const updatePresence = async ({ user, project, params, body = {} }) => {
+  const state = PRESENCE_STATES.includes(body.state) ? body.state : 'heartbeat';
+  const file = await DriveFileRepository.getFile({
+    filters: { _id: params.fileId, project_id: project._id, deleted_on: 0 },
+  });
+  if (!file) throw new BadRequest('file_not_found');
+
+  const permissions = await DriveFileAccessService.resolveFilePermission({ user, project, file });
+  if (!permissions || !permissions.can_view) throw new Forbidden('insufficient_permissions');
+
+  await DriveEditPresenceService.touch({
+    projectId: project._id,
+    fileId: file._id,
+    userId: user._id,
+    canEdit: !!permissions.can_edit && body.mode !== 'view',
+    state,
+  });
+  return { state };
+};
+
 /* ───────────── Generate Editor Page Token (for mobile WebView) ───────────── */
 
 const generateEditorPageToken = async ({ user, project, params }) => {
@@ -197,4 +227,5 @@ export default {
   getEditorConfig,
   generateEditorPageToken,
   getEditorPage,
+  updatePresence,
 };
