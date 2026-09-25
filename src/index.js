@@ -12,6 +12,7 @@ import axios from 'axios';
 import { mongodbConnect } from 'zillit-libs/config';
 import { installServiceToken } from 'zillit-libs/utils/service-token';
 import app from './app';
+import DriveVersionDiffQueue from './services/v2/driveVersionDiffQueue';
 
 // const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -48,6 +49,8 @@ mongodbConnect(process.env.DB_URL)
       const { port } = server.address();
       console.log('app listening at http://%s:%s', host, port);
     });
+    // Background comparisons of saved versions (see driveVersionDiffQueue.js)
+    DriveVersionDiffQueue.start();
   })
   .catch((error) => {
     console.log(`mongoDbConnect:error: for Process ${process.pid} : `, error.message);

@@ -27,6 +27,26 @@ class DriveEditor {
   }
 
   /**
+   * POST /:fileId/presence
+   * Records that the caller has the file open in the editor.
+   */
+  async updatePresence(req, res) {
+    const { user, project, params, body } = req;
+    try {
+      const result = await DriveEditorService.updatePresence({
+        user, project, params, body,
+      });
+      return ApiResponse.handleResponse(res, {
+        message: 'editor_presence_updated',
+        data: result,
+      });
+    } catch (error) {
+      console.log('[editor_presence_failed]:', error.message);
+      return ApiResponse.handleError(res, error);
+    }
+  }
+
+  /**
    * GET /:fileId/page-token
    * Mobile app calls this to get a short-lived JWT for WebView.
    */
