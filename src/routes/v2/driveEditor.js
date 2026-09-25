@@ -26,6 +26,20 @@ router.get(
 );
 
 /**
+ * POST /:fileId/presence  { state: open | heartbeat | close }
+ * The web editor reports that it has the file open, so each saved version
+ * can list everyone who was editing.
+ */
+router.post(
+  '/:fileId/presence',
+  objectIdValidator(['fileId']),
+  moduledata,
+  checkAccess,
+  driveViewAccess,
+  DriveEditor.updatePresence,
+);
+
+/**
  * GET /:fileId/page-token
  * Authenticated — mobile app calls this to get a short-lived JWT.
  */
