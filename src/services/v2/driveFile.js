@@ -15,6 +15,7 @@ import DriveActivityService from './driveActivity.js';
 import DriveNameResolver from './driveNameResolver.js';
 import DriveNotificationReceivers from './driveNotificationReceivers.js';
 import socketClient, { buildUserRooms } from '../../config/socketClient.js';
+import DrivePdfThumbnail from './drivePdfThumbnail.js';
 
 // Field sanitization — prevents injection of protected fields
 const FILE_ALLOWED_FIELDS = ['file_name', 'folder_id', 'file_path', 'description', 'file_type', 'file_extension', 'file_size', 'file_size_bytes', 'mime_type', 'attachments'];
@@ -368,6 +369,13 @@ const createFile = async ({ user, project, device, body }) => {
   DriveActivityService.log({
     projectId: project._id, userId: user._id, action: 'file_created',
     itemId: file._id, itemType: 'file', itemName: file.file_name,
+  });
+
+  // Page-1 thumbnail for PDFs, in the background
+  DrivePdfThumbnail.queuePdfThumbnail({
+    projectId: project._id,
+    file,
+    notifyUserIds: [user._id, ...receiverIds],
   });
 
   return file;
