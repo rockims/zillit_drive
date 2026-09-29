@@ -10,6 +10,7 @@ import EncryptDecryptUtil from 'zillit-libs/utils/encrypt-decrypt';
 import DriveFileRequestRepository from '../../repositories/v2/driveFileRequest.js';
 import DriveFolderRepository from '../../repositories/v2/driveFolder.js';
 import DriveFileRepository from '../../repositories/v2/driveFile.js';
+import DrivePdfThumbnail from './drivePdfThumbnail.js';
 import { getUrls } from './config.js';
 
 /**
@@ -625,6 +626,13 @@ const receiveUpload = async ({ params, query, req }) => {
       uploaded_on: Date.now(),
     },
     bytes: fileSize,
+  });
+
+  // Page-1 thumbnail for PDFs, in the background
+  DrivePdfThumbnail.queuePdfThumbnail({
+    projectId: request.project_id,
+    file: driveFile,
+    notifyUserIds: [request.created_by],
   });
 
   return {

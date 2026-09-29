@@ -1,45 +1,28 @@
 import ApiResponse from 'zillit-libs/utils/api-response';
 import DriveVersionService from '../../services/v2/driveVersion.js';
 
-const listVersions = async (req, res, next) => {
+// Each handler passes the request context to the service and wraps the
+// result (or error) in the standard API response.
+const handle = (serviceMethod, message) => async (req, res) => {
   try {
-    const versions = await DriveVersionService.listVersions({
-      project: req.project,
-      params: req.params,
-    });
-    return ApiResponse.handleResponse(res, { message: 'versions_listed', data: versions });
-  } catch (err) {
-    return ApiResponse.handleError(res, err);
-  }
-};
-
-const getVersionDownloadUrl = async (req, res, next) => {
-  try {
-    const result = await DriveVersionService.getVersionDownloadUrl({
-      project: req.project,
-      params: req.params,
-    });
-    return ApiResponse.handleResponse(res, { message: 'version_download_url_generated', data: result });
-  } catch (err) {
-    return ApiResponse.handleError(res, err);
-  }
-};
-
-const restoreVersion = async (req, res, next) => {
-  try {
-    const result = await DriveVersionService.restoreVersion({
+    const data = await serviceMethod({
       user: req.user,
       project: req.project,
       params: req.params,
+      body: req.body,
     });
-    return ApiResponse.handleResponse(res, { message: 'version_restored', data: result });
+    return ApiResponse.handleResponse(res, { message, data });
   } catch (err) {
     return ApiResponse.handleError(res, err);
   }
 };
 
 export default {
-  listVersions,
-  getVersionDownloadUrl,
-  restoreVersion,
+  listVersions: handle(DriveVersionService.listVersions, 'versions_listed'),
+  getHistory: handle(DriveVersionService.getHistory, 'version_history_fetched'),
+  getVersionChanges: handle(DriveVersionService.getVersionChanges, 'version_changes_fetched'),
+  getVersionPreviewConfig: handle(DriveVersionService.getVersionPreviewConfig, 'version_preview_generated'),
+  getVersionDownloadUrl: handle(DriveVersionService.getVersionDownloadUrl, 'version_download_url_generated'),
+  renameVersion: handle(DriveVersionService.renameVersion, 'version_renamed'),
+  restoreVersion: handle(DriveVersionService.restoreVersion, 'version_restored'),
 };

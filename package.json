@@ -63,6 +63,7 @@
     "twilio": "^4.19.0",
     "uuid": "^9.0.1",
     "winston": "^3.10.0",
+    "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz",
     "zillit-libs": "git+https://github.com/rockims/zillit_libs.git#staging"
   },
   "devDependencies": {

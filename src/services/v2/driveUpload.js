@@ -22,6 +22,7 @@ import DriveNameResolver from './driveNameResolver.js';
 import DriveNotificationReceivers from './driveNotificationReceivers.js';
 import DriveUploadSession from 'zillit-libs/mongo-models-v2/DriveUploadSession';
 import DriveThumbnailService from './driveThumbnail.js';
+import DrivePdfThumbnail from './drivePdfThumbnail.js';
 import socketClient, { buildUserRooms } from '../../config/socketClient.js';
 
 const {
@@ -450,6 +451,13 @@ const completeUpload = async ({ user, project, device, params, body }) => {
     projectId: project._id,
     file,
   }).catch((err) => console.error('[thumbnail] async error:', err.message));
+
+  // Page-1 thumbnail for PDFs, in the background
+  DrivePdfThumbnail.queuePdfThumbnail({
+    projectId: project._id,
+    file,
+    notifyUserIds: [file.created_by, ...allReceiverIds],
+  });
 
   return file;
 };
