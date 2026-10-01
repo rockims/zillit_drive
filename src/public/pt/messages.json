@@ -120,5 +120,8 @@
   "file_no_changes_to_save": "Não há alterações para salvar.",
   "file_too_large_to_open_as_text": "Este arquivo é grande demais para ser aberto aqui.",
   "file_too_large_to_save_as_text": "Este arquivo é grande demais para ser salvo aqui.",
-  "file_type_not_text_editable": "Este tipo de arquivo não pode ser editado aqui."
+  "file_type_not_text_editable": "Este tipo de arquivo não pode ser editado aqui.",
+  "drive_edit_announced": "Todas as pessoas com acesso foram notificadas.",
+  "drive_edit_announce_nobody": "Ninguém mais tem acesso a este arquivo ainda, então ninguém foi notificado.",
+  "drive_edit_announce_too_soon": "Você acabou de enviar uma notificação sobre este arquivo. Aguarde um minuto antes de enviar novamente."
 }

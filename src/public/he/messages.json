@@ -120,5 +120,8 @@
   "file_no_changes_to_save": "אין שינויים לשמירה.",
   "file_too_large_to_open_as_text": "הקובץ הזה גדול מדי לפתיחה כאן.",
   "file_too_large_to_save_as_text": "הקובץ הזה גדול מדי לשמירה כאן.",
-  "file_type_not_text_editable": "לא ניתן לערוך כאן סוג קובץ זה."
+  "file_type_not_text_editable": "לא ניתן לערוך כאן סוג קובץ זה.",
+  "drive_edit_announced": "כל מי שיש לו גישה קיבל הודעה.",
+  "drive_edit_announce_nobody": "לאף אחד אחר אין עדיין גישה לקובץ הזה, ולכן אף אחד לא קיבל הודעה.",
+  "drive_edit_announce_too_soon": "שלחת הודעה על הקובץ הזה ממש עכשיו. יש להמתין דקה לפני שליחה נוספת."
 }

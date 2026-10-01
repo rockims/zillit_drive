@@ -1,5 +1,6 @@
 import ApiResponse from 'zillit-libs/utils/api-response';
 import DriveEditorService from '../../services/v2/driveEditor.js';
+import DriveEditAnnouncementService from '../../services/v2/driveEditAnnouncement.js';
 
 class DriveEditor {
   constructor() {
@@ -42,6 +43,28 @@ class DriveEditor {
       });
     } catch (error) {
       console.log('[editor_presence_failed]:', error.message);
+      return ApiResponse.handleError(res, error);
+    }
+  }
+
+  /**
+   * POST /:fileId/announce  { note? }
+   * The person who edited the file tells everyone with access.
+   */
+  async announceEdit(req, res) {
+    const {
+      user, project, params, body,
+    } = req;
+    try {
+      const result = await DriveEditAnnouncementService.announce({
+        user, project, params, body,
+      });
+      return ApiResponse.handleResponse(res, {
+        message: result.notified > 0 ? 'drive_edit_announced' : 'drive_edit_announce_nobody',
+        data: result,
+      });
+    } catch (error) {
+      console.log('[editor_announce_failed]:', error.message);
       return ApiResponse.handleError(res, error);
     }
   }

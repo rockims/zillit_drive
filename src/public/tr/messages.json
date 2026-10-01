@@ -120,5 +120,8 @@
   "file_no_changes_to_save": "Kaydedilecek değişiklik yok.",
   "file_too_large_to_open_as_text": "Bu dosya burada açılamayacak kadar büyük.",
   "file_too_large_to_save_as_text": "Bu dosya burada kaydedilemeyecek kadar büyük.",
-  "file_type_not_text_editable": "Bu dosya türü burada düzenlenemez."
+  "file_type_not_text_editable": "Bu dosya türü burada düzenlenemez.",
+  "drive_edit_announced": "Erişimi olan herkese bildirim gönderildi.",
+  "drive_edit_announce_nobody": "Bu dosyaya henüz başka kimsenin erişimi yok, bu yüzden kimseye bildirim gönderilmedi.",
+  "drive_edit_announce_too_soon": "Bu dosya hakkında az önce bildirim gönderdiniz. Tekrar göndermeden önce lütfen bir dakika bekleyin."
 }

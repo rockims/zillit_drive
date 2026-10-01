@@ -120,5 +120,8 @@
   "file_no_changes_to_save": "Walang pagbabagong ise-save.",
   "file_too_large_to_open_as_text": "Masyadong malaki ang file na ito para buksan dito.",
   "file_too_large_to_save_as_text": "Masyadong malaki ang file na ito para i-save dito.",
-  "file_type_not_text_editable": "Hindi maaaring i-edit dito ang ganitong uri ng file."
+  "file_type_not_text_editable": "Hindi maaaring i-edit dito ang ganitong uri ng file.",
+  "drive_edit_announced": "Naabisuhan na ang lahat ng may access.",
+  "drive_edit_announce_nobody": "Wala pang ibang may access sa file na ito, kaya walang naabisuhan.",
+  "drive_edit_announce_too_soon": "Kakapadala mo lang ng abiso tungkol sa file na ito. Maghintay ng isang minuto bago magpadala muli."
 }

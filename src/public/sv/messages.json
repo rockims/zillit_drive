@@ -120,5 +120,8 @@
   "file_no_changes_to_save": "Det finns inga ändringar att spara.",
   "file_too_large_to_open_as_text": "Den här filen är för stor för att öppnas här.",
   "file_too_large_to_save_as_text": "Den här filen är för stor för att sparas här.",
-  "file_type_not_text_editable": "Den här filtypen kan inte redigeras här."
+  "file_type_not_text_editable": "Den här filtypen kan inte redigeras här.",
+  "drive_edit_announced": "Alla med åtkomst har meddelats.",
+  "drive_edit_announce_nobody": "Ingen annan har åtkomst till den här filen än, så ingen har meddelats.",
+  "drive_edit_announce_too_soon": "Du har precis skickat ett meddelande om den här filen. Vänta en minut innan du skickar igen."
 }

@@ -120,5 +120,8 @@
   "file_no_changes_to_save": "保存する変更はありません。",
   "file_too_large_to_open_as_text": "このファイルは大きすぎるため、ここでは開けません。",
   "file_too_large_to_save_as_text": "このファイルは大きすぎるため、ここでは保存できません。",
-  "file_type_not_text_editable": "この種類のファイルはここでは編集できません。"
+  "file_type_not_text_editable": "この種類のファイルはここでは編集できません。",
+  "drive_edit_announced": "アクセス権のある全員に通知しました。",
+  "drive_edit_announce_nobody": "このファイルにアクセスできる人が他にいないため、通知は送信されませんでした。",
+  "drive_edit_announce_too_soon": "このファイルについての通知を送信したばかりです。1分待ってからもう一度送信してください。"
 }
