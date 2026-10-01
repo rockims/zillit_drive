@@ -120,5 +120,8 @@
   "file_no_changes_to_save": "Det er ingen endringer å lagre.",
   "file_too_large_to_open_as_text": "Denne filen er for stor til å åpnes her.",
   "file_too_large_to_save_as_text": "Denne filen er for stor til å lagres her.",
-  "file_type_not_text_editable": "Denne filtypen kan ikke redigeres her."
+  "file_type_not_text_editable": "Denne filtypen kan ikke redigeres her.",
+  "drive_edit_announced": "Alle med tilgang har fått beskjed.",
+  "drive_edit_announce_nobody": "Ingen andre har tilgang til denne filen ennå, så ingen har fått beskjed.",
+  "drive_edit_announce_too_soon": "Du har nettopp sendt beskjed om denne filen. Vent et minutt før du sender igjen."
 }

@@ -40,6 +40,21 @@ router.post(
 );
 
 /**
+ * POST /:fileId/announce  { note? }
+ * "Let others know you updated this file": notifies everyone with access,
+ * once, when the person who edited asks for it. Needs edit permission on
+ * the file.
+ */
+router.post(
+  '/:fileId/announce',
+  objectIdValidator(['fileId']),
+  moduledata,
+  checkAccess,
+  driveViewAccess,
+  DriveEditor.announceEdit,
+);
+
+/**
  * GET /:fileId/page-token
  * Authenticated — mobile app calls this to get a short-lived JWT.
  */

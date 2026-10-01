@@ -120,5 +120,8 @@
   "file_no_changes_to_save": "没有要保存的更改。",
   "file_too_large_to_open_as_text": "此文件过大，无法在此处打开。",
   "file_too_large_to_save_as_text": "此文件过大，无法在此处保存。",
-  "file_type_not_text_editable": "此文件类型无法在此处编辑。"
+  "file_type_not_text_editable": "此文件类型无法在此处编辑。",
+  "drive_edit_announced": "已通知所有有权访问的人。",
+  "drive_edit_announce_nobody": "目前还没有其他人有权访问此文件，因此未通知任何人。",
+  "drive_edit_announce_too_soon": "您刚刚已就此文件发送过通知，请等待一分钟后再发送。"
 }
