@@ -112,5 +112,13 @@
   "drive_folder_moved": "Drive folder moved.",
   "drive_folder_moved_message": "A drive folder has been moved.",
   "drive_folder_deleted": "Drive folder deleted.",
-  "drive_folder_deleted_message": "A drive folder has been deleted."
+  "drive_folder_deleted_message": "A drive folder has been deleted.",
+  "folder_zip_link_created": "Your download is starting.",
+  "drive_zip_busy_try_again": "Several downloads are being prepared. Please try again in a minute.",
+  "invalid_or_expired_download_link": "This download link has expired. Please try again.",
+  "file_changed_since_opened": "Someone else changed this file after you opened it.",
+  "file_no_changes_to_save": "There are no changes to save.",
+  "file_too_large_to_open_as_text": "This file is too large to open here.",
+  "file_too_large_to_save_as_text": "This file is too large to save here.",
+  "file_type_not_text_editable": "This file type cannot be edited here."
 }

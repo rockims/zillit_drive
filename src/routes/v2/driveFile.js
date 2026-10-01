@@ -14,6 +14,18 @@ const moduledata = moduleData(['device_id', 'project_id', 'user_id']);
 const driveViewAccess = viewingAccess('tools_section', null, 'drive_tool');
 const drivePostAccess = postingAccess('tools_section', null, 'drive_tool');
 
+// A text file's content arrives as the request body. It is moved off
+// req.body so the request logger never prints whole documents.
+const textBody = [
+  express.text({ type: 'text/*', limit: '3mb' }),
+  (req, res, next) => {
+    if (typeof req.body === 'string') req.textBody = req.body;
+    else if (Number(req.headers['content-length']) === 0) req.textBody = '';
+    req.body = {};
+    next();
+  },
+];
+
 // Get files by type (must come before parameterized routes)
 router.get('/by-type', moduledata, checkAccess, driveViewAccess, DriveFile.getFilesByType);
 
@@ -31,6 +43,12 @@ router.get('/:fileId/stream', objectIdValidator(['fileId']), moduledata, checkAc
 
 // Get presigned preview URL (only requires view permission, not download)
 router.get('/:fileId/preview', objectIdValidator(['fileId']), moduledata, checkAccess, driveViewAccess, DriveFile.getFilePreviewUrl);
+
+// Read a Markdown file's text, or a saved version's with ?version_id= (view permission)
+router.get('/:fileId/text', objectIdValidator(['fileId']), moduledata, checkAccess, driveViewAccess, DriveFile.getFileText);
+
+// Save a Markdown file's text as a new version (edit permission)
+router.put('/:fileId/text', textBody, objectIdValidator(['fileId']), moduledata, checkAccess, drivePostAccess, DriveFile.saveFileText);
 
 // Update file
 router.put('/:fileId', objectIdValidator(['fileId']), moduledata, checkAccess, drivePostAccess, joiValidator(driveFileValidators.updateFile), DriveFile.updateFile);

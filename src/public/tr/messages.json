@@ -112,5 +112,13 @@
   "drive_folder_moved": "Drive klasörü taşındı.",
   "drive_folder_moved_message": "Bir Drive klasörü taşındı.",
   "drive_folder_deleted": "Drive klasörü silindi.",
-  "drive_folder_deleted_message": "Bir Drive klasörü silindi."
+  "drive_folder_deleted_message": "Bir Drive klasörü silindi.",
+  "folder_zip_link_created": "İndirmeniz başlıyor.",
+  "drive_zip_busy_try_again": "Birkaç indirme hazırlanıyor. Lütfen bir dakika sonra tekrar deneyin.",
+  "invalid_or_expired_download_link": "Bu indirme bağlantısının süresi doldu. Lütfen tekrar deneyin.",
+  "file_changed_since_opened": "Siz açtıktan sonra başka biri bu dosyayı değiştirdi.",
+  "file_no_changes_to_save": "Kaydedilecek değişiklik yok.",
+  "file_too_large_to_open_as_text": "Bu dosya burada açılamayacak kadar büyük.",
+  "file_too_large_to_save_as_text": "Bu dosya burada kaydedilemeyecek kadar büyük.",
+  "file_type_not_text_editable": "Bu dosya türü burada düzenlenemez."
 }

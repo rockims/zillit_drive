@@ -112,5 +112,13 @@
   "drive_folder_moved": "ย้ายโฟลเดอร์ Drive แล้ว",
   "drive_folder_moved_message": "มีการย้ายโฟลเดอร์ Drive",
   "drive_folder_deleted": "ลบโฟลเดอร์ Drive แล้ว",
-  "drive_folder_deleted_message": "มีการลบโฟลเดอร์ Drive"
+  "drive_folder_deleted_message": "มีการลบโฟลเดอร์ Drive",
+  "folder_zip_link_created": "กำลังเริ่มดาวน์โหลด",
+  "drive_zip_busy_try_again": "กำลังเตรียมการดาวน์โหลดหลายรายการ โปรดลองอีกครั้งในอีกหนึ่งนาที",
+  "invalid_or_expired_download_link": "ลิงก์ดาวน์โหลดนี้หมดอายุแล้ว โปรดลองอีกครั้ง",
+  "file_changed_since_opened": "มีผู้อื่นแก้ไขไฟล์นี้หลังจากที่คุณเปิด",
+  "file_no_changes_to_save": "ไม่มีการเปลี่ยนแปลงที่จะบันทึก",
+  "file_too_large_to_open_as_text": "ไฟล์นี้มีขนาดใหญ่เกินกว่าจะเปิดที่นี่ได้",
+  "file_too_large_to_save_as_text": "ไฟล์นี้มีขนาดใหญ่เกินกว่าจะบันทึกที่นี่ได้",
+  "file_type_not_text_editable": "ไม่สามารถแก้ไขไฟล์ประเภทนี้ที่นี่ได้"
 }

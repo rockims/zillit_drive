@@ -112,5 +112,13 @@
   "drive_folder_moved": "Pasta do Drive movida.",
   "drive_folder_moved_message": "Uma pasta do Drive foi movida.",
   "drive_folder_deleted": "Pasta do Drive excluída.",
-  "drive_folder_deleted_message": "Uma pasta do Drive foi excluída."
+  "drive_folder_deleted_message": "Uma pasta do Drive foi excluída.",
+  "folder_zip_link_created": "Seu download está começando.",
+  "drive_zip_busy_try_again": "Vários downloads estão sendo preparados. Tente novamente em um minuto.",
+  "invalid_or_expired_download_link": "Este link de download expirou. Tente novamente.",
+  "file_changed_since_opened": "Outra pessoa alterou este arquivo depois que você o abriu.",
+  "file_no_changes_to_save": "Não há alterações para salvar.",
+  "file_too_large_to_open_as_text": "Este arquivo é grande demais para ser aberto aqui.",
+  "file_too_large_to_save_as_text": "Este arquivo é grande demais para ser salvo aqui.",
+  "file_type_not_text_editable": "Este tipo de arquivo não pode ser editado aqui."
 }

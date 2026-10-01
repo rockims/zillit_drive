@@ -112,5 +112,13 @@
   "drive_folder_moved": "Složka Drive přesunuta.",
   "drive_folder_moved_message": "Složka Drive byla přesunuta.",
   "drive_folder_deleted": "Složka Drive odstraněna.",
-  "drive_folder_deleted_message": "Složka Drive byla odstraněna."
+  "drive_folder_deleted_message": "Složka Drive byla odstraněna.",
+  "folder_zip_link_created": "Stahování začíná.",
+  "drive_zip_busy_try_again": "Připravuje se několik stahování. Zkuste to prosím znovu za minutu.",
+  "invalid_or_expired_download_link": "Platnost odkazu ke stažení vypršela. Zkuste to prosím znovu.",
+  "file_changed_since_opened": "Někdo jiný tento soubor změnil poté, co jste ho otevřeli.",
+  "file_no_changes_to_save": "Nejsou žádné změny k uložení.",
+  "file_too_large_to_open_as_text": "Tento soubor je příliš velký na to, aby se zde otevřel.",
+  "file_too_large_to_save_as_text": "Tento soubor je příliš velký na to, aby se zde uložil.",
+  "file_type_not_text_editable": "Tento typ souboru zde nelze upravovat."
 }

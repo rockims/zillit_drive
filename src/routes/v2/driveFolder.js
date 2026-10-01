@@ -23,6 +23,10 @@ router.get('/', moduledata, checkAccess, driveViewAccess, DriveFolder.getFolders
 // Get combined folder + file contents with server-side sort/filter/group/pagination
 router.get('/contents', moduledata, checkAccess, driveViewAccess, DriveFolder.getDriveContents);
 
+// Save a folder as a .zip. Token-authenticated (from POST /:folderId/download-zip),
+// because a browser download can't carry our headers. Before /:folderId.
+router.get('/download-zip', DriveFolder.downloadZip);
+
 // Get specific folder by ID
 router.get('/:folderId', objectIdValidator(['folderId']), moduledata, checkAccess, driveViewAccess, DriveFolder.getFolder);
 
@@ -53,6 +57,9 @@ router.post(
   joiValidator(driveFolderValidators.inheritFolderAccess),
   DriveFolder.inheritFolderAccess
 );
+
+// Short-lived link to download the folder as a .zip (owner or editor)
+router.post('/:folderId/download-zip', objectIdValidator(['folderId']), moduledata, checkAccess, driveViewAccess, DriveFolder.createZipDownloadLink);
 
 // Move folder to different parent
 router.put('/:folderId/move', objectIdValidator(['folderId']), moduledata, checkAccess, drivePostAccess, joiValidator(driveFolderValidators.moveFolder), DriveFolder.moveFolder);

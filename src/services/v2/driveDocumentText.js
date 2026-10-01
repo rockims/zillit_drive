@@ -5,7 +5,7 @@ import * as XLSX from 'xlsx';
  * comparing versions.
  *
  * Reads every text format the editor opens:
- *   documents      docx, doc, odt, rtf, txt
+ *   documents      docx, doc, odt, rtf, txt, md
  *   presentations  pptx, ppt, odp (one section per slide)
  *
  * Each paragraph is { section, text }: section is "Document" or
@@ -14,7 +14,7 @@ import * as XLSX from 'xlsx';
  * tracked deletions don't. Pure, and throws on a file it can't read.
  */
 
-const DOCUMENT_EXTENSIONS = new Set(['docx', 'doc', 'odt', 'rtf', 'txt']);
+const DOCUMENT_EXTENSIONS = new Set(['docx', 'doc', 'odt', 'rtf', 'txt', 'md', 'markdown']);
 const PRESENTATION_EXTENSIONS = new Set(['pptx', 'ppt', 'odp']);
 const BODY = 'Document';
 
@@ -524,6 +524,8 @@ const READERS = {
   odt: (buffer) => odfParagraphs(buffer, { presentation: false }),
   rtf: rtfParagraphs,
   txt: txtParagraphs,
+  md: txtParagraphs,
+  markdown: txtParagraphs,
   pptx: pptxParagraphs,
   ppt: pptParagraphs,
   odp: (buffer) => odfParagraphs(buffer, { presentation: true }),

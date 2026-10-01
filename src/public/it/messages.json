@@ -112,5 +112,13 @@
   "drive_folder_moved": "Cartella Drive spostata.",
   "drive_folder_moved_message": "Una cartella Drive è stata spostata.",
   "drive_folder_deleted": "Cartella Drive eliminata.",
-  "drive_folder_deleted_message": "Una cartella Drive è stata eliminata."
+  "drive_folder_deleted_message": "Una cartella Drive è stata eliminata.",
+  "folder_zip_link_created": "Il download sta per iniziare.",
+  "drive_zip_busy_try_again": "Sono in preparazione più download. Riprova tra un minuto.",
+  "invalid_or_expired_download_link": "Questo link di download è scaduto. Riprova.",
+  "file_changed_since_opened": "Qualcun altro ha modificato questo file dopo che l'hai aperto.",
+  "file_no_changes_to_save": "Non ci sono modifiche da salvare.",
+  "file_too_large_to_open_as_text": "Questo file è troppo grande per essere aperto qui.",
+  "file_too_large_to_save_as_text": "Questo file è troppo grande per essere salvato qui.",
+  "file_type_not_text_editable": "Questo tipo di file non può essere modificato qui."
 }
