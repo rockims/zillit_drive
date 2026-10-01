@@ -112,5 +112,13 @@
   "drive_folder_moved": "Nailipat ang Drive folder.",
   "drive_folder_moved_message": "Nailipat ang isang Drive folder.",
   "drive_folder_deleted": "Natanggal ang Drive folder.",
-  "drive_folder_deleted_message": "Natanggal ang isang Drive folder."
+  "drive_folder_deleted_message": "Natanggal ang isang Drive folder.",
+  "folder_zip_link_created": "Nagsisimula na ang iyong download.",
+  "drive_zip_busy_try_again": "Maraming download ang inihahanda. Pakisubukang muli pagkalipas ng isang minuto.",
+  "invalid_or_expired_download_link": "Nag-expire na ang link ng download na ito. Pakisubukang muli.",
+  "file_changed_since_opened": "May ibang nagbago sa file na ito matapos mo itong buksan.",
+  "file_no_changes_to_save": "Walang pagbabagong ise-save.",
+  "file_too_large_to_open_as_text": "Masyadong malaki ang file na ito para buksan dito.",
+  "file_too_large_to_save_as_text": "Masyadong malaki ang file na ito para i-save dito.",
+  "file_type_not_text_editable": "Hindi maaaring i-edit dito ang ganitong uri ng file."
 }

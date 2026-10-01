@@ -112,5 +112,13 @@
   "drive_folder_moved": "Folder Drive dipindahkan.",
   "drive_folder_moved_message": "Folder Drive telah dipindahkan.",
   "drive_folder_deleted": "Folder Drive dipadam.",
-  "drive_folder_deleted_message": "Folder Drive telah dipadam."
+  "drive_folder_deleted_message": "Folder Drive telah dipadam.",
+  "folder_zip_link_created": "Muat turun anda sedang bermula.",
+  "drive_zip_busy_try_again": "Beberapa muat turun sedang disediakan. Sila cuba lagi dalam masa seminit.",
+  "invalid_or_expired_download_link": "Pautan muat turun ini telah tamat tempoh. Sila cuba lagi.",
+  "file_changed_since_opened": "Orang lain telah mengubah fail ini selepas anda membukanya.",
+  "file_no_changes_to_save": "Tiada perubahan untuk disimpan.",
+  "file_too_large_to_open_as_text": "Fail ini terlalu besar untuk dibuka di sini.",
+  "file_too_large_to_save_as_text": "Fail ini terlalu besar untuk disimpan di sini.",
+  "file_type_not_text_editable": "Jenis fail ini tidak boleh disunting di sini."
 }

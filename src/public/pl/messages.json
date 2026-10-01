@@ -112,5 +112,13 @@
   "drive_folder_moved": "Folder Drive przeniesiony.",
   "drive_folder_moved_message": "Folder Drive został przeniesiony.",
   "drive_folder_deleted": "Folder Drive usunięty.",
-  "drive_folder_deleted_message": "Folder Drive został usunięty."
+  "drive_folder_deleted_message": "Folder Drive został usunięty.",
+  "folder_zip_link_created": "Pobieranie się rozpoczyna.",
+  "drive_zip_busy_try_again": "Przygotowywanych jest kilka pobrań. Spróbuj ponownie za minutę.",
+  "invalid_or_expired_download_link": "Ten link do pobrania wygasł. Spróbuj ponownie.",
+  "file_changed_since_opened": "Ktoś inny zmienił ten plik po tym, jak go otworzyłeś.",
+  "file_no_changes_to_save": "Brak zmian do zapisania.",
+  "file_too_large_to_open_as_text": "Ten plik jest zbyt duży, aby otworzyć go tutaj.",
+  "file_too_large_to_save_as_text": "Ten plik jest zbyt duży, aby zapisać go tutaj.",
+  "file_type_not_text_editable": "Tego typu pliku nie można tutaj edytować."
 }

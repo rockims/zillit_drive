@@ -4,12 +4,10 @@ import Forbidden from 'zillit-libs/errors/Forbidden';
 
 import DriveFileRepository from '../../repositories/v2/driveFile.js';
 import DriveFileVersionRepository from '../../repositories/v2/driveFileVersion.js';
-import DriveActivityService from './driveActivity.js';
 import DriveVersionStore from './driveVersionStore.js';
-import DriveVersionDiffQueue from './driveVersionDiffQueue.js';
+import { announceSavedVersion } from './driveVersionEvents.js';
 import DriveEditPresenceService from './driveEditPresence.js';
 import DriveSheetView from './driveSheetView.js';
-import socketClient from '../../config/socketClient.js';
 import { signAccessToken, verifyAccessToken, getAccessTokenTTL } from '../../utils/editorJwt.js';
 import { getS3Client, getFileS3Info, getObjectBuffer } from '../../utils/driveS3.js';
 
@@ -344,41 +342,12 @@ const putFileContents = async ({ params, query, req }) => {
   }
 
   const { version, savedAt } = result;
-  DriveVersionDiffQueue.kick();
-
-  // Real-time refresh for the file list and any open history panel
-  socketClient('__admin_events__', {
-    event: 'drive:file:updated',
-    room: `${tokenPayload.projectId}_room`,
-    data: {
-      project_id: tokenPayload.projectId,
-      file_id: file._id,
-      action: 'editor_save',
-      version_id: version._id,
-    },
-  });
-  socketClient('__admin_events__', {
-    event: 'drive:version:created',
-    room: `${tokenPayload.projectId}_room`,
-    data: {
-      project_id: tokenPayload.projectId,
-      file_id: file._id,
-      version_id: version._id,
-      version_number: version.version_number,
-      saved_by: tokenPayload.userId,
-      save_type: version.save_type,
-    },
-  });
-
-  // Log activity (fire-and-forget)
-  DriveActivityService.log({
+  announceSavedVersion({
     projectId: tokenPayload.projectId,
     userId: tokenPayload.userId,
-    action: 'file_updated',
-    itemId: file._id,
-    itemType: 'file',
-    itemName: file.file_name,
-    details: { source: 'collabora', version_number: version.version_number },
+    file,
+    version,
+    source: 'collabora',
   });
 
   console.log(`[wopi_putfile] File saved: ${file.file_name} v${version.version_number} (${buffer.length} bytes, ${version.save_type})`);
@@ -390,6 +359,7 @@ export {
   WopiConflict,
   parseWopiFileId,
   versionFileName,
+  contentTimeOf,
 };
 
 export default {

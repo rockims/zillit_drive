@@ -112,5 +112,13 @@
   "drive_folder_moved": "Drive-Ordner verschoben.",
   "drive_folder_moved_message": "Ein Drive-Ordner wurde verschoben.",
   "drive_folder_deleted": "Drive-Ordner gelöscht.",
-  "drive_folder_deleted_message": "Ein Drive-Ordner wurde gelöscht."
+  "drive_folder_deleted_message": "Ein Drive-Ordner wurde gelöscht.",
+  "folder_zip_link_created": "Ihr Download wird gestartet.",
+  "drive_zip_busy_try_again": "Es werden gerade mehrere Downloads vorbereitet. Bitte versuchen Sie es in einer Minute erneut.",
+  "invalid_or_expired_download_link": "Dieser Download-Link ist abgelaufen. Bitte versuchen Sie es erneut.",
+  "file_changed_since_opened": "Jemand anderes hat diese Datei geändert, nachdem Sie sie geöffnet haben.",
+  "file_no_changes_to_save": "Es gibt keine Änderungen zum Speichern.",
+  "file_too_large_to_open_as_text": "Diese Datei ist zu groß, um sie hier zu öffnen.",
+  "file_too_large_to_save_as_text": "Diese Datei ist zu groß, um sie hier zu speichern.",
+  "file_type_not_text_editable": "Dieser Dateityp kann hier nicht bearbeitet werden."
 }

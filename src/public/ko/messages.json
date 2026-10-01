@@ -112,5 +112,13 @@
   "drive_folder_moved": "Drive 폴더가 이동되었습니다.",
   "drive_folder_moved_message": "Drive 폴더가 이동되었습니다.",
   "drive_folder_deleted": "Drive 폴더가 삭제되었습니다.",
-  "drive_folder_deleted_message": "Drive 폴더가 삭제되었습니다."
+  "drive_folder_deleted_message": "Drive 폴더가 삭제되었습니다.",
+  "folder_zip_link_created": "다운로드가 시작됩니다.",
+  "drive_zip_busy_try_again": "여러 다운로드를 준비하고 있습니다. 1분 후에 다시 시도해 주세요.",
+  "invalid_or_expired_download_link": "다운로드 링크가 만료되었습니다. 다시 시도해 주세요.",
+  "file_changed_since_opened": "파일을 연 후 다른 사용자가 이 파일을 변경했습니다.",
+  "file_no_changes_to_save": "저장할 변경 사항이 없습니다.",
+  "file_too_large_to_open_as_text": "이 파일은 너무 커서 여기에서 열 수 없습니다.",
+  "file_too_large_to_save_as_text": "이 파일은 너무 커서 여기에서 저장할 수 없습니다.",
+  "file_type_not_text_editable": "이 파일 형식은 여기에서 편집할 수 없습니다."
 }

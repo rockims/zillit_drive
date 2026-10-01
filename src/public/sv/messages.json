@@ -112,5 +112,13 @@
   "drive_folder_moved": "Drive-mapp flyttad.",
   "drive_folder_moved_message": "En Drive-mapp har flyttats.",
   "drive_folder_deleted": "Drive-mapp raderad.",
-  "drive_folder_deleted_message": "En Drive-mapp har raderats."
+  "drive_folder_deleted_message": "En Drive-mapp har raderats.",
+  "folder_zip_link_created": "Din nedladdning startar.",
+  "drive_zip_busy_try_again": "Flera nedladdningar förbereds. Försök igen om en minut.",
+  "invalid_or_expired_download_link": "Nedladdningslänken har gått ut. Försök igen.",
+  "file_changed_since_opened": "Någon annan ändrade den här filen efter att du öppnade den.",
+  "file_no_changes_to_save": "Det finns inga ändringar att spara.",
+  "file_too_large_to_open_as_text": "Den här filen är för stor för att öppnas här.",
+  "file_too_large_to_save_as_text": "Den här filen är för stor för att sparas här.",
+  "file_type_not_text_editable": "Den här filtypen kan inte redigeras här."
 }

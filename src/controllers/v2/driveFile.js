@@ -1,6 +1,7 @@
 import ApiResponse from 'zillit-libs/utils/api-response';
 
 import DriveFileService from '../../services/v2/driveFile.js';
+import DriveTextFileService from '../../services/v2/driveTextFile.js';
 
 class DriveFile {
   constructor() {
@@ -145,6 +146,37 @@ class DriveFile {
       return ApiResponse.handleResponse(res, { message: 'share_link_generated', data: result });
     } catch (error) {
       console.log('[share_link_generation_failed]:');
+      return ApiResponse.handleError(res, error);
+    }
+  }
+
+  async getFileText(req, res) {
+    const {
+      user, project, params, query,
+    } = req;
+    try {
+      const data = await DriveTextFileService.getText({
+        user, project, params, query,
+      });
+      return ApiResponse.handleResponse(res, { message: 'file_fetched', data });
+    } catch (error) {
+      console.log('[file_text_fetch_failed]:');
+      return ApiResponse.handleError(res, error);
+    }
+  }
+
+  async saveFileText(req, res) {
+    const {
+      user, project, params, query, textBody,
+    } = req;
+    try {
+      const data = await DriveTextFileService.saveText({
+        user, project, params, query, text: textBody,
+      });
+      const message = data.saved ? 'file_updated' : 'file_no_changes_to_save';
+      return ApiResponse.handleResponse(res, { message, data });
+    } catch (error) {
+      console.log('[file_text_save_failed]:');
       return ApiResponse.handleError(res, error);
     }
   }

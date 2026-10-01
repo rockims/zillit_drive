@@ -112,5 +112,13 @@
   "drive_folder_moved": "Folder Drive dipindahkan.",
   "drive_folder_moved_message": "Folder Drive telah dipindahkan.",
   "drive_folder_deleted": "Folder Drive dihapus.",
-  "drive_folder_deleted_message": "Folder Drive telah dihapus."
+  "drive_folder_deleted_message": "Folder Drive telah dihapus.",
+  "folder_zip_link_created": "Unduhan Anda dimulai.",
+  "drive_zip_busy_try_again": "Beberapa unduhan sedang disiapkan. Silakan coba lagi dalam satu menit.",
+  "invalid_or_expired_download_link": "Tautan unduhan ini telah kedaluwarsa. Silakan coba lagi.",
+  "file_changed_since_opened": "Orang lain mengubah file ini setelah Anda membukanya.",
+  "file_no_changes_to_save": "Tidak ada perubahan untuk disimpan.",
+  "file_too_large_to_open_as_text": "File ini terlalu besar untuk dibuka di sini.",
+  "file_too_large_to_save_as_text": "File ini terlalu besar untuk disimpan di sini.",
+  "file_type_not_text_editable": "Jenis file ini tidak dapat diedit di sini."
 }
